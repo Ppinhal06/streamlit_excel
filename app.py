@@ -136,16 +136,18 @@ if st.button("Generate Bill of Materials (Excel)"):
             STRICT ENGINEERING RULES:
             {json.dumps(engineering_rules, indent=2)}
             
-            You must apply these rules mandatorily. 
-            - If the user mentions "AHU", "FCU", "Secondary Circuit" (or LPHW/CHW circuits), "Buffer Tank", "Pressurization Unit", "Mains Water Tank", or "Fire Water Tank", add all mandatory components multiplied by the quantity requested.
-            - If the user mentions "Boilers", "Heat Pump", or any "Water Tanks", apply the system rules carefully: add the system-level components only once per plant/system, and multiply the per-unit components by the number of units requested. Avoid duplicating system-level components (like Outside Temp Sensors) if they already exist in the overall plant.
+            CRITICAL INSTRUCTION FOR QUANTITIES:
+            - DO NOT list identical units one by one (e.g., do not create 50 separate rows for 50 FCUs).
+            - You MUST group identical equipment together in a single row and multiply the "Quantity" value.
+            - If the user asks for 50 FCUs, there should only be ONE row for the FCU Space Temperature Sensor with a Quantity of 50.
             
             User description: "{project_description}"
             
             Return ONLY a JSON array with the exact following structure for each component (no markdown, no additional text):
             [
-              {{"Main Equipment": "LPHW Secondary Circuit 1", "Component": "Secondary Flow Temperature Sensor", "Quantity": 1, "Notes": "Rule applied"}},
-              {{"Main Equipment": "AHU 1", "Component": "Frost Stat", "Quantity": 1, "Notes": "Rule applied"}}
+              {{"Main Equipment": "FCUs (Qty: 50)", "Component": "Space CO2 Sensor", "Quantity": 50, "Notes": "Grouped for all FCUs"}},
+              {{"Main Equipment": "AHUs (Qty: 3)", "Component": "Frost Stat", "Quantity": 3, "Notes": "Rule applied"}},
+              {{"Main Equipment": "Boiler System", "Component": "Outside Temperature Sensor", "Quantity": 1, "Notes": "System level (added once)"}}
             ]
             """
             

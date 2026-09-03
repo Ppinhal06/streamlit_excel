@@ -2,9 +2,11 @@ import streamlit as st
 import pandas as pd
 import io
 import json
+import os
 import google.generativeai as genai
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
+from openpyxl import load_workbook
 
 # 1. UI Configuration & API
 st.set_page_config(page_title="BEMS Estimator - DC Controls", layout="wide")
@@ -136,13 +138,12 @@ if st.button("Generate Points List (Excel)"):
             1. Create a HEADER ROW for each main equipment group. (e.g., Description: "Boiler", Quantity: 2, MCC: "MCB". Leave AI, AO, DI, DO, Labour blank).
             2. Below the header row, list its components based on the ENGINEERING RULES.
             3. CRITICAL CALCULATION: For each component, lookup its base AI, AO, DI, DO, and Labour in the CATALOG. You MUST multiply these base values by the quantity of the main equipment.
-               (e.g., If Boiler Qty is 2, and "Boiler Flow Immersion Temp Sensor" has 1 AI and 50 Labour, the output MUST be AI: 2, Quantity: 2, Labour At 20%: 100).
             4. Use the exact Part No. from the catalog (e.g., "Volt Free Contacts", "0...10V dc", "TTI-S Brass Pocket").
             5. Leave IOs or Labour as empty strings ("") if the value is 0.
             
             User description: "{project_description}"
             
-            Return ONLY a JSON array matching the standard DC Controls Excel columns:
+            Return ONLY a JSON array matching the standard DC Controls columns. DO NOT use markdown.
             [
               {{
                 "Description": "Boiler", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "MCB", "Quantity": 2, "Part No.": "", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": ""
@@ -154,47 +155,54 @@ if st.button("Generate Points List (Excel)"):
             """
             
             try:
+                # Llamada a la IA
                 response = model.generate_content(prompt)
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                df = pd.DataFrame(materials_data)
+                # --- AQUÍ ESTÁ LA MAGIA DEL FORMATO OFICIAL ---
+                template_path = "template.xlsx"
                 
-                # Reorder to match exact Excel template if possible
-                expected_columns = ['Description', 'AI', 'AO', 'DI', 'DO', 'MCC', 'Quantity', 'Part No.', 'Panel At 20%', 'Parts At 0%', 'Labour At 20%']
-                for col in expected_columns:
-                    if col not in df.columns:
-                        df[col] = ""
-                df = df[expected_columns]
+                if not os.path.exists(template_path):
+                    st.error("⚠️ Falta el archivo 'template.xlsx' en tu GitHub. Súbelo para usar el formato oficial.")
+                else:
+                    # Abrir la plantilla sin romper su diseño
+                    wb = load_workbook(template_path)
+                    ws = wb["Points List"] # Asegúrate de que la hoja se llame así en tu template
+                    
+                    # El renglón donde empiezan los datos reales (según tu Excel, debajo de Quote Ref, Project, etc.)
+                    # Usualmente es el renglón 6 o 7. Ajusta este número si tus datos empiezan más abajo.
+                    start_row = 6 
+                    
+                    for idx, row_data in enumerate(materials_data):
+                        current_row = start_row + idx
+                        # Insertamos columna por columna basándonos en tu layout:
+                        # Columna B = Description, C = AI, D = AO, etc.
+                        ws.cell(row=current_row, column=2, value=row_data.get("Description", ""))
+                        ws.cell(row=current_row, column=3, value=row_data.get("AI", ""))
+                        ws.cell(row=current_row, column=4, value=row_data.get("AO", ""))
+                        ws.cell(row=current_row, column=5, value=row_data.get("DI", ""))
+                        ws.cell(row=current_row, column=6, value=row_data.get("DO", ""))
+                        ws.cell(row=current_row, column=7, value=row_data.get("MCC", ""))
+                        ws.cell(row=current_row, column=8, value=row_data.get("Quantity", ""))
+                        ws.cell(row=current_row, column=9, value=row_data.get("Part No.", ""))
+                        ws.cell(row=current_row, column=10, value=row_data.get("Panel At 20%", ""))
+                        ws.cell(row=current_row, column=11, value=row_data.get("Parts At 0%", ""))
+                        ws.cell(row=current_row, column=12, value=row_data.get("Labour At 20%", ""))
 
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Points List')
-                    worksheet = writer.sheets['Points List']
-                    
-                    for col_num, col in enumerate(df.columns, 1):
-                        max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
-                        col_letter = get_column_letter(col_num)
-                        worksheet.column_dimensions[col_letter].width = max_len
-                    
-                    max_row = len(df) + 1
-                    max_col = len(df.columns)
-                    table_ref = f"A1:{get_column_letter(max_col)}{max_row}"
-                    
-                    tab = Table(displayName="PointsList_Table", ref=table_ref)
-                    style = TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
-                    tab.tableStyleInfo = style
-                    worksheet.add_table(tab)
+                    buffer = io.BytesIO()
+                    wb.save(buffer)
 
-                st.success("Points List generated successfully!")
-                st.download_button(
-                    label="📥 Download Points List (Excel)",
-                    data=buffer.getvalue(),
-                    file_name="DC_Controls_Points_List_Priced.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                
-                st.dataframe(df, use_container_width=True)
+                    st.success("¡Cotización generada usando el formato oficial de DC Controls!")
+                    st.download_button(
+                        label="📥 Descargar Points List Oficial (Excel)",
+                        data=buffer.getvalue(),
+                        file_name="DC_Controls_Quotation.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                    
+                    # Mostrar una tablita rápida en la web (opcional, solo visual)
+                    st.dataframe(pd.DataFrame(materials_data), use_container_width=True)
 
             except Exception as e:
-                st.error(f"Error: {e}\nEnsure the AI returned a valid JSON format.")
+                st.error(f"Error: {e}\nRevisa que el JSON de la IA sea válido.")

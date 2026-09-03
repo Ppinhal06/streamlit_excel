@@ -7,147 +7,149 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 
 # 1. UI Configuration & API
-st.set_page_config(page_title="BOM Generator - DC Controls", layout="centered")
-st.title("Automated BEMS Component Generator")
+st.set_page_config(page_title="BEMS Estimator - DC Controls", layout="wide")
+st.title("Automated BEMS Points List & Estimator")
+st.markdown("Generador basado en el estándar de cotización de DC Controls (Formato IDA Cavan).")
 
 api_key = st.text_input("Enter API Key (Gemini/OpenAI):", type="password")
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# 2. Knowledge Base (Strict Engineering Rules based on DC Controls diagrams)
+# 2. Knowledge Base (Real rules extracted from IDA Cavan Project)
 engineering_rules = {
-    "Boiler System": {
-        "system_level_components": [
+    "Common LPHW/CHW Devices (System Level)": {
+        "mandatory": [
+            "Header Flow Immersion Temperature Sensor",
+            "Header Return Immersion Temperature Sensor",
+            "Outside Frost Thermostat",
             "Outside Temperature Sensor",
-            "Outside Frost Stat",
-            "Fire Alarm Interface Relay",
-            "Boiler Flow Temperature Sensor",
-            "Boiler Return Temperature Sensor",
-            "Immersion Frost Stat"
+            "Immersion Frost Thermostat"
         ],
-        "per_boiler_components": [
-            "Boiler Enable Relay",
-            "Boiler Lockout Monitor"
-        ],
-        "notes": "Add ONE set of system-level components per plant. Multiply per-boiler components by the total number of boilers."
+        "notes": "Include these ONLY ONCE per plant for the main headers."
     },
-    "Heat Pump System": {
-        "system_level_components": [
-            "Outside Temperature Sensor",
-            "Outside Frost Stat",
-            "Fire Alarm Interface Relay"
-        ],
-        "notes": "Primary pumps are built into the HP unit. Do not add external pump components for primary flow. System-level components added once per plant."
+    "Boiler": {
+        "per_unit": [
+            "Boiler Enable",
+            "Boiler Common Fault",
+            "Boiler Control Signal",
+            "Boiler Flow Immersion Temperature Sensor",
+            "Boiler Return Immersion Temperature Sensor"
+        ]
     },
-    "Buffer Tank (LPHW or CHW)": {
-        "mandatory_components": [
-            "Flow Temperature Sensor",
-            "Return Temperature Sensor",
-            "Buffer High Temperature Sensor",
-            "Buffer Low Temperature Sensor"
-        ],
-        "notes": "Applies to both Hot Water (LPHW) and Chilled Water (CHW) buffer cylinders."
+    "Pump (Primary/Secondary)": {
+        "per_unit": [
+            "Pump Enable",
+            "Pump Status",
+            "Variable Speed Drive",
+            "Flow Immersion Temperature Sensor",
+            "3 Port Control Valve / Actuator"
+        ]
     },
-    "Pressurization Unit": {
-        "mandatory_components": [
-            "High Pressure Switch",
-            "Low Pressure Switch"
-        ],
-        "notes": "If it is an LPHW unit, add 1x Immersion Frost Stat."
+    "Pressurisation Unit": {
+        "per_unit": [
+            "Pressurisation Unit High Pressure",
+            "Pressurisation Unit Low Pressure"
+        ]
     },
-    "Secondary Circuit (LPHW or CHW)": {
-        "mandatory_components": [
-            "Secondary Flow Temperature Sensor",
-            "Secondary Return Temperature Sensor",
-            "Pump Flow Switch", 
-            "Pump Solid State Relay"
-        ],
-        "notes": "Applies to AHU, FCU, or DHW secondary pump circuits. Multiply by the number of circuits requested."
+    "Calorifier / Hot Water Generator": {
+        "per_unit": [
+            "Enable",
+            "Common Fault",
+            "Control Signal",
+            "Immersion Temperature Sensor",
+            "High Limit Thermostat (60-95 Man. Reset)"
+        ]
     },
     "AHU (Air Handling Unit)": {
-        "mandatory_components": [
-            "Outside Temperature Sensor", 
-            "Room Temperature Sensor",
-            "Supply Temperature Sensor",
-            "Fresh Air Damper Actuator", 
-            "Panel Filter DP Switch", 
-            "Bag Filter DP Switch", 
-            "Frost Stat", 
-            "Heating Valve Actuator", 
-            "Cooling Valve Actuator", 
-            "Supply Fan VSD",
-            "Fire Alarm Interface Relay"
-        ],
-        "notes": "Standard configuration based on Restaurant Ventilation schematic."
+        "per_unit": [
+            "Enable", "Status", "Control Signal", "Supply Air Temp Sensor", "Return Air Temp Sensor", "Frost Stat"
+        ]
     },
     "FCU (Fan Coil Unit)": {
-        "mandatory_components": [
-            "Space Temperature Sensor", 
-            "Space Humidity Sensor", 
-            "Space CO2 Sensor", 
-            "Control Valve Actuator"
-        ],
-        "notes": "Standard bedroom/zone configuration."
-    },
-    "Water Tank System (General)": {
-        "system_level_components": [
-            "Outside Temperature Sensor",
-            "Outside Frost Stat",
-            "Fire Alarm Interface Relay"
-        ],
-        "notes": "Add these ONLY ONCE if the project contains any Mains or Fire Water Tanks."
-    },
-    "Mains Water Tank": {
-        "mandatory_components": [
-            "High Level Sensor (x2)",
-            "Low Level Sensor (x2)",
-            "Tank Temperature Sensor",
-            "Boiler/Booster Status Monitor"
-        ],
-        "notes": "Standard domestic mains tank. Multiplies by quantity of tanks."
-    },
-    "Fire Water Tank": {
-        "mandatory_components": [
-            "High Level Sensor",
-            "Low Level Sensor",
-            "Tank Temperature Sensor",
-            "Boiler/Booster Status Monitor"
-        ],
-        "notes": "Standard fire reserve tank. Multiplies by quantity of tanks."
+        "per_unit": [
+            "Space Temperature Sensor", "Control Valve Actuator"
+        ]
     }
 }
 
+# 3. Technical Catalog (Exact extraction from IDA Cavan)
+# Base Labour is 50 per point. The AI will multiply this by the quantity.
+component_catalog = {
+    "Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Outside Frost Thermostat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Outside Temperature Sensor": {"Part": "TB/TO", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Immersion Frost Thermostat": {"Part": "DBTV-2U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    
+    "Boiler Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Boiler Common Fault": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Boiler Control Signal": {"Part": "0…10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Boiler Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Boiler Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    
+    "Pump Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Pump Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Variable Speed Drive": {"Part": "Built in to Pump", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "3 Port Control Valve / Actuator": {"Part": "Valve 40mm", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    
+    "Pressurisation Unit High Pressure": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Pressurisation Unit Low Pressure": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    
+    "Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Common Fault": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Control Signal": {"Part": "0…10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "High Limit Thermostat (60-95 Man. Reset)": {"Part": "RAK TW 1000B", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    
+    "Space Temperature Sensor": {"Part": "RS-Temp", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Control Valve Actuator": {"Part": "MVC / DB_VZ", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Supply Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Return Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
+}
+
 project_description = st.text_area(
-    "Describe the circuit equipment:", 
-    placeholder="Example: We need to automate a project with: 2 Boilers, 3 LPHW Secondary Circuits, 2 CHW Secondary Circuits..."
+    "Describe the project for the Points List:", 
+    placeholder="Example: We need a plant with 2 Boilers, 3 Primary Pumps, 2 LPHW Pressurisation Units, and 1 Calorifier."
 )
 
-# 3. Generation Logic
-if st.button("Generate Bill of Materials (Excel)"):
+# 4. Generation Logic
+if st.button("Generate Points List (Excel)"):
     if not api_key or not project_description:
         st.warning("Please provide both the API Key and the project description.")
     else:
-        with st.spinner("Analyzing requirements and applying engineering rules..."):
+        with st.spinner("Engineering Points List, assigning real IOs, Part Numbers and calculating Labour..."):
             
             prompt = f"""
-            You are an expert BEMS engineer. Analyze the following circuit description and generate a Bill of Materials (BOM).
+            You are an expert BEMS estimator working for DC Controls. Generate a Points List based on the description, mimicking the exact style of the "IDA Cavan" project.
             
-            STRICT ENGINEERING RULES:
+            ENGINEERING RULES (What components go in each system):
             {json.dumps(engineering_rules, indent=2)}
             
-            CRITICAL INSTRUCTION FOR QUANTITIES:
-            - DO NOT list identical units one by one (e.g., do not create 50 separate rows for 50 FCUs).
-            - You MUST group identical equipment together in a single row and multiply the "Quantity" value.
-            - If the user asks for 50 FCUs, there should only be ONE row for the FCU Space Temperature Sensor with a Quantity of 50.
+            TECHNICAL CATALOG (Exact Parts and I/O values):
+            {json.dumps(component_catalog, indent=2)}
+            
+            CRITICAL FORMATTING INSTRUCTIONS (CAVAN PROJECT STYLE):
+            1. Create a HEADER ROW for each main equipment group. (e.g., Description: "Boiler", Quantity: 2, MCC: "MCB". Leave AI, AO, DI, DO, Labour blank).
+            2. Below the header row, list its components based on the ENGINEERING RULES.
+            3. CRITICAL CALCULATION: For each component, lookup its base AI, AO, DI, DO, and Labour in the CATALOG. You MUST multiply these base values by the quantity of the main equipment.
+               (e.g., If Boiler Qty is 2, and "Boiler Flow Immersion Temp Sensor" has 1 AI and 50 Labour, the output MUST be AI: 2, Quantity: 2, Labour At 20%: 100).
+            4. Use the exact Part No. from the catalog (e.g., "Volt Free Contacts", "0...10V dc", "TTI-S Brass Pocket").
+            5. Leave IOs or Labour as empty strings ("") if the value is 0.
             
             User description: "{project_description}"
             
-            Return ONLY a JSON array with the exact following structure for each component (no markdown, no additional text):
+            Return ONLY a JSON array matching the standard DC Controls Excel columns:
             [
-              {{"Main Equipment": "FCUs (Qty: 50)", "Component": "Space CO2 Sensor", "Quantity": 50, "Notes": "Grouped for all FCUs"}},
-              {{"Main Equipment": "AHUs (Qty: 3)", "Component": "Frost Stat", "Quantity": 3, "Notes": "Rule applied"}},
-              {{"Main Equipment": "Boiler System", "Component": "Outside Temperature Sensor", "Quantity": 1, "Notes": "System level (added once)"}}
+              {{
+                "Description": "Boiler", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "MCB", "Quantity": 2, "Part No.": "", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": ""
+              }},
+              {{
+                "Description": "Boiler Flow Immersion Temperature Sensor", "AI": 2, "AO": "", "DI": "", "DO": "", "MCC": "", "Quantity": 2, "Part No.": "TTI-S Brass Pocket", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": 100
+              }}
             ]
             """
             
@@ -157,11 +159,18 @@ if st.button("Generate Bill of Materials (Excel)"):
                 materials_data = json.loads(json_text)
                 
                 df = pd.DataFrame(materials_data)
-                buffer = io.BytesIO()
                 
+                # Reorder to match exact Excel template if possible
+                expected_columns = ['Description', 'AI', 'AO', 'DI', 'DO', 'MCC', 'Quantity', 'Part No.', 'Panel At 20%', 'Parts At 0%', 'Labour At 20%']
+                for col in expected_columns:
+                    if col not in df.columns:
+                        df[col] = ""
+                df = df[expected_columns]
+
+                buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Bill of Materials')
-                    worksheet = writer.sheets['Bill of Materials']
+                    df.to_excel(writer, index=False, sheet_name='Points List')
+                    worksheet = writer.sheets['Points List']
                     
                     for col_num, col in enumerate(df.columns, 1):
                         max_len = max(df[col].astype(str).map(len).max(), len(col)) + 2
@@ -170,24 +179,22 @@ if st.button("Generate Bill of Materials (Excel)"):
                     
                     max_row = len(df) + 1
                     max_col = len(df.columns)
-                    max_col_letter = get_column_letter(max_col)
-                    table_ref = f"A1:{max_col_letter}{max_row}"
+                    table_ref = f"A1:{get_column_letter(max_col)}{max_row}"
                     
-                    tab = Table(displayName="BOM_Table", ref=table_ref)
-                    style = TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False,
-                                           showLastColumn=False, showRowStripes=True, showColumnStripes=False)
+                    tab = Table(displayName="PointsList_Table", ref=table_ref)
+                    style = TableStyleInfo(name="TableStyleMedium9", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
                     tab.tableStyleInfo = style
                     worksheet.add_table(tab)
 
-                st.success("Excel generated successfully!")
+                st.success("Points List generated successfully!")
                 st.download_button(
-                    label="Download Excel",
+                    label="📥 Download Points List (Excel)",
                     data=buffer.getvalue(),
-                    file_name="Circuit_Materials.xlsx",
+                    file_name="DC_Controls_Points_List_Priced.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
                 
                 st.dataframe(df, use_container_width=True)
 
             except Exception as e:
-                st.error(f"An error occurred during generation: {e}\nEnsure the AI returned a valid JSON format.")
+                st.error(f"Error: {e}\nEnsure the AI returned a valid JSON format.")

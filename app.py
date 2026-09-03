@@ -16,7 +16,7 @@ st.markdown("Generador basado en el estándar de cotización de DC Controls (For
 api_key = st.text_input("Enter API Key (Gemini/OpenAI):", type="password")
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-2.5-flash') 
 
 # 2. Knowledge Base (Real rules extracted from IDA Cavan Project)
 engineering_rules = {

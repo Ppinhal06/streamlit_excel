@@ -177,7 +177,7 @@ if st.button("Generate Points List"):
             {json.dumps(component_catalog, indent=2)}
             
             CRITICAL FORMATTING INSTRUCTIONS (CAVAN PROJECT STYLE):
-            1. Create a HEADER ROW for each main equipment group.
+            1. Create a HEADER ROW for each main equipment group (e.g., Description: "Boiler", Quantity: 2, MCC: "MCB". Leave AI, AO, DI, DO, Labour blank).
             2. Below the header row, list its components based on the ENGINEERING RULES.
             3. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
             4. Use the exact Part No. from the catalog.
@@ -185,7 +185,15 @@ if st.button("Generate Points List"):
             
             User description: "{project_description}"
             
-            Return ONLY a JSON array matching the standard DC Controls columns. DO NOT use markdown.
+            Return ONLY a JSON array matching the standard DC Controls columns. DO NOT use markdown. You MUST use these exact keys:
+            [
+              {{
+                "Description": "Boiler", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "MCB", "Quantity": 2, "Part No.": "", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": ""
+              }},
+              {{
+                "Description": "Boiler Enable", "AI": "", "AO": "", "DI": "", "DO": 2, "MCC": "", "Quantity": "", "Part No.": "Volt Free Contacts", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": 100
+              }}
+            ]
             """
             
             try:

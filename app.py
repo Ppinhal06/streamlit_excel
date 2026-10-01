@@ -87,7 +87,7 @@ component_catalog = {
     "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- FUNCIÓN MAESTRA CON PROTECCIÓN Y LIMPIEZA PROFUNDA ---
+# --- FUNCIÓN MAESTRA ---
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
         wb = load_workbook("template.xlsx", keep_links=False)
@@ -105,7 +105,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
     reference_styles = {}
     
-    # Extraer estilos
     for col in range(2, 13): 
         cell = ws.cell(row=start_row, column=col)
         if type(cell).__name__ != 'MergedCell':
@@ -116,7 +115,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 'alignment': copy.copy(cell.alignment)
             }
 
-    # Inyectar los datos
     for idx, row_data in enumerate(datos):
         current_row = start_row + idx
         col_map = {
@@ -137,33 +135,17 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             except AttributeError:
                 pass
 
-    # --- LIMPIEZA PROFUNDA DE FILAS FANTASMA ---
-    last_row = start_row + len(datos) - 1
-    delete_start = last_row + 1
-    ws.print_area = "" # Resetear área de impresión para que no extienda el archivo
-    
+    # --- LIMPIEZA DE FILAS (SOLO PARA EL I/O SCHEDULE) ---
     if es_io_schedule:
+        last_row = start_row + len(datos) - 1
+        delete_start = last_row + 1
+        ws.print_area = "" 
+        
         delete_amount = ws.max_row - delete_start + 1
         if delete_amount > 0:
-            # Eliminar celdas combinadas en el área a borrar para evitar que openpyxl se corrompa
             merged_ranges = list(ws.merged_cells.ranges)
             for mcr in merged_ranges:
                 if mcr.min_row >= delete_start:
-                    ws.merged_cells.remove(mcr)
-            ws.delete_rows(idx=delete_start, amount=delete_amount)
-    else:
-        req_row = None
-        for r in range(delete_start, ws.max_row + 1):
-            val = str(ws.cell(row=r, column=2).value).strip()
-            if val in ["BMS Requirements", "Summary"]:
-                req_row = r
-                break
-        
-        if req_row and req_row > delete_start:
-            delete_amount = req_row - delete_start
-            merged_ranges = list(ws.merged_cells.ranges)
-            for mcr in merged_ranges:
-                if mcr.min_row >= delete_start and mcr.max_row < req_row:
                     ws.merged_cells.remove(mcr)
             ws.delete_rows(idx=delete_start, amount=delete_amount)
 
@@ -229,10 +211,10 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- EXCEL 1: DOCUMENTO COMPLETO ---
+                # --- EXCEL 1: DOCUMENTO COMPLETO (Intacto) ---
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
-                # --- EXCEL 2: I/O SCHEDULE ---
+                # --- EXCEL 2: I/O SCHEDULE (Filtrado y recortado) ---
                 datos_io = []
                 header_temporal = None
                 

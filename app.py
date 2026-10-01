@@ -87,7 +87,7 @@ component_catalog = {
     "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- FUNCIÓN MAESTRA CON PROTECCIÓN Y LIMPIEZA DE BASURA ---
+# --- FUNCIÓN MAESTRA CON PROTECCIÓN Y LIMPIEZA PROFUNDA ---
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
         wb = load_workbook("template.xlsx", keep_links=False)
@@ -105,7 +105,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
     reference_styles = {}
     
-    # Extraer estilos del renglón base
+    # Extraer estilos
     for col in range(2, 13): 
         cell = ws.cell(row=start_row, column=col)
         if type(cell).__name__ != 'MergedCell':
@@ -137,25 +137,35 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             except AttributeError:
                 pass
 
-    # --- LIMPIEZA INTELIGENTE DE FILAS SOBRANTES ---
+    # --- LIMPIEZA PROFUNDA DE FILAS FANTASMA ---
     last_row = start_row + len(datos) - 1
+    delete_start = last_row + 1
+    ws.print_area = "" # Resetear área de impresión para que no extienda el archivo
     
     if es_io_schedule:
-        # En el I/O Schedule borramos TODO el resto del Excel hasta el final (precios, resumen, notas)
-        delete_amount = ws.max_row - last_row
+        delete_amount = ws.max_row - delete_start + 1
         if delete_amount > 0:
-            ws.delete_rows(idx=last_row + 1, amount=delete_amount)
+            # Eliminar celdas combinadas en el área a borrar para evitar que openpyxl se corrompa
+            merged_ranges = list(ws.merged_cells.ranges)
+            for mcr in merged_ranges:
+                if mcr.min_row >= delete_start:
+                    ws.merged_cells.remove(mcr)
+            ws.delete_rows(idx=delete_start, amount=delete_amount)
     else:
-        # En la cotización, buscamos dónde empieza el resumen y borramos solo el espacio vacío o equipos predefinidos sobrantes
         req_row = None
-        for r in range(start_row, ws.max_row + 1):
-            if ws.cell(row=r, column=2).value == "BMS Requirements":
+        for r in range(delete_start, ws.max_row + 1):
+            val = str(ws.cell(row=r, column=2).value).strip()
+            if val in ["BMS Requirements", "Summary"]:
                 req_row = r
                 break
         
-        if req_row and req_row > last_row + 1:
-            delete_amount = req_row - (last_row + 1)
-            ws.delete_rows(idx=last_row + 1, amount=delete_amount)
+        if req_row and req_row > delete_start:
+            delete_amount = req_row - delete_start
+            merged_ranges = list(ws.merged_cells.ranges)
+            for mcr in merged_ranges:
+                if mcr.min_row >= delete_start and mcr.max_row < req_row:
+                    ws.merged_cells.remove(mcr)
+            ws.delete_rows(idx=delete_start, amount=delete_amount)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -222,7 +232,7 @@ if st.button("Generate Points List"):
                 # --- EXCEL 1: DOCUMENTO COMPLETO ---
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
-                # --- EXCEL 2: I/O SCHEDULE (Filtrado estricto) ---
+                # --- EXCEL 2: I/O SCHEDULE ---
                 datos_io = []
                 header_temporal = None
                 

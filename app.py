@@ -14,6 +14,10 @@ st.title("Automated BEMS Points List & Estimator")
 st.markdown("---")
 st.markdown("Professional generator with dynamic Excel template injection.")
 
+# --- INICIALIZAR MEMORIA DE STREAMLIT ---
+if "generado" not in st.session_state:
+    st.session_state.generado = False
+
 # --- PROFESSIONAL SIDEBAR ---
 with st.sidebar:
     st.header("System Configuration")
@@ -26,7 +30,7 @@ if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# 2. Knowledge Base (Real rules extracted from IDA Cavan Project)
+# 2. Knowledge Base 
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {
         "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
@@ -51,7 +55,7 @@ engineering_rules = {
     }
 }
 
-# 3. Technical Catalog (Base Labour is 50 per point)
+# 3. Technical Catalog 
 component_catalog = {
     "Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
@@ -105,27 +109,22 @@ if st.button("Generate Points List"):
             prompt = f"""
             You are an expert BEMS estimator working for DC Controls. Generate a Points List based on the description, mimicking the exact style of the "IDA Cavan" project.
             
-            ENGINEERING RULES (What components go in each system):
+            ENGINEERING RULES:
             {json.dumps(engineering_rules, indent=2)}
             
-            TECHNICAL CATALOG (Exact Parts and I/O values):
+            TECHNICAL CATALOG:
             {json.dumps(component_catalog, indent=2)}
             
             CRITICAL FORMATTING INSTRUCTIONS (CAVAN PROJECT STYLE):
-            1. Create a HEADER ROW for each main equipment group. (e.g., Description: "Boiler", Quantity: 2, MCC: "MCB". Leave AI, AO, DI, DO, Labour blank).
+            1. Create a HEADER ROW for each main equipment group.
             2. Below the header row, list its components based on the ENGINEERING RULES.
-            3. CRITICAL CALCULATION: For each component, lookup its base AI, AO, DI, DO, and Labour in the CATALOG. You MUST multiply these base values by the quantity of the main equipment.
-            4. Use the exact Part No. from the catalog (e.g., "Volt Free Contacts", "0...10V dc", "TTI-S Brass Pocket").
+            3. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
+            4. Use the exact Part No. from the catalog.
             5. Leave IOs or Labour as empty strings ("") if the value is 0.
             
             User description: "{project_description}"
             
             Return ONLY a JSON array matching the standard DC Controls columns. DO NOT use markdown.
-            [
-              {{
-                "Description": "Boiler", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "MCB", "Quantity": 2, "Part No.": "", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": ""
-              }}
-            ]
             """
             
             try:
@@ -200,28 +199,37 @@ if st.button("Generate Points List"):
                 with pd.ExcelWriter(buffer_filtrado, engine='openpyxl') as writer:
                     df_filtrado.to_excel(writer, index=False, sheet_name='Filtered IO Points')
                 
-                # --- INTERFAZ DE RESULTADOS ---
-                st.success(f"Quotation for '{project_name}' generated successfully!")
-                
-                col_btn1, col_btn2 = st.columns(2)
-                
-                with col_btn1:
-                    st.download_button(
-                        label="📄 Download Official Quotation (Full Template)",
-                        data=buffer.getvalue(),
-                        file_name=f"Quotation_{project_name.replace(' ', '_')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                    
-                with col_btn2:
-                    st.download_button(
-                        label="🔌 Download I/O Points Only (>0)",
-                        data=buffer_filtrado.getvalue(),
-                        file_name=f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                
-                st.dataframe(pd.DataFrame(materials_data), use_container_width=True)
+                # --- GUARDAR EN MEMORIA ---
+                st.session_state.generado = True
+                st.session_state.buffer_full = buffer.getvalue()
+                st.session_state.buffer_filtrado = buffer_filtrado.getvalue()
+                st.session_state.materials_data = materials_data
+                st.session_state.nombre_archivo = f"Quotation_{project_name.replace(' ', '_')}.xlsx"
+                st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
 
             except Exception as e:
                 st.error(f"Error processing template: {e}")
+
+# --- MOSTRAR RESULTADOS DESDE LA MEMORIA ---
+if st.session_state.generado:
+    st.success(f"Quotation generated successfully!")
+    
+    col_btn1, col_btn2 = st.columns(2)
+    
+    with col_btn1:
+        st.download_button(
+            label="📄 Download Official Quotation (Full Template)",
+            data=st.session_state.buffer_full,
+            file_name=st.session_state.nombre_archivo,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+    with col_btn2:
+        st.download_button(
+            label="🔌 Download I/O Points Only (>0)",
+            data=st.session_state.buffer_filtrado,
+            file_name=st.session_state.nombre_io,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
+    st.dataframe(pd.DataFrame(st.session_state.materials_data), use_container_width=True)

@@ -87,10 +87,11 @@ component_catalog = {
     "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- FUNCIÓN MAESTRA PARA INYECTAR DATOS EN LA PLANTILLA ---
+# --- FUNCIÓN MAESTRA CON PROTECCIÓN CONTRA CORRUPCIÓN ---
 def crear_excel_formateado(datos, nombre_proyecto):
     try:
-        wb = load_workbook("template.xlsx")
+        # keep_links=False previene la corrupción de "External formula reference" mostrada en el error
+        wb = load_workbook("template.xlsx", keep_links=False)
     except FileNotFoundError:
         st.error("⚠️ The 'template.xlsx' file is missing from the repository.")
         st.stop()
@@ -140,6 +141,13 @@ def crear_excel_formateado(datos, nombre_proyecto):
     return buf.getvalue()
 
 
+def tiene_puntos(row):
+    for io_type in ["AI", "AO", "DI", "DO"]:
+        val = str(row.get(io_type, "")).strip()
+        if val and val.replace('.', '', 1).isdigit() and float(val) > 0:
+            return True
+    return False
+
 st.subheader("Project Details")
 col1, col2 = st.columns([1, 2])
 with col1:
@@ -188,27 +196,23 @@ if st.button("Generate Points List"):
                 # --- EXCEL 1: DOCUMENTO COMPLETO ---
                 buffer_full = crear_excel_formateado(materials_data, project_name)
 
-                # --- EXCEL 2: I/O SCHEDULE (Estructurado y Filtrado) ---
-                def tiene_puntos(row):
-                    for io_type in ["AI", "AO", "DI", "DO"]:
-                        val = str(row.get(io_type, "")).strip()
-                        if val and val.replace('.', '', 1).isdigit() and float(val) > 0:
-                            return True
-                    return False
-
+                # --- EXCEL 2: I/O SCHEDULE (Filtrado estricto) ---
                 datos_io = []
                 header_temporal = None
                 
                 for row in materials_data:
-                    # Es un encabezado si no tiene Part No. ni puntos (ej. "Boiler | Qty: 2")
-                    es_header = not row.get("Part No.") and not tiene_puntos(row)
+                    desc = str(row.get("Description", "")).strip()
+                    part = str(row.get("Part No.", "")).strip()
+                    
+                    # Un encabezado tiene Descripción, pero NO tiene Part No. ni puntos de I/O
+                    es_header = bool(desc) and not bool(part) and not tiene_puntos(row)
                     
                     if es_header:
                         header_temporal = row
                     elif tiene_puntos(row):
                         if header_temporal:
                             datos_io.append(header_temporal)
-                            header_temporal = None # Lo vaciamos para no repetirlo
+                            header_temporal = None # Lo vaciamos tras agregarlo
                         datos_io.append(row)
 
                 buffer_filtrado = crear_excel_formateado(datos_io, project_name)

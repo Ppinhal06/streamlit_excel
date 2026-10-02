@@ -24,13 +24,13 @@ with st.sidebar:
     api_key = st.text_input("Enter API Key (Gemini):", type="password")
     
     st.markdown("---")
-    st.info("✅ Standard DC Controls template is pre-loaded from the cloud server.")
+    st.info("Standard DC Controls template is pre-loaded from the cloud server.")
 
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# 2. Base de Conocimiento Expandida (Ahora incluye Tanques, Chillers, Medidores, etc.)
+# 2. Base de Conocimiento Expandida
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {
         "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
@@ -117,12 +117,13 @@ component_catalog = {
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- FUNCIÓN MAESTRA CON ESTILOS CORREGIDOS ---
+# --- FUNCIÓN MAESTRA CON LIMPIEZA INTELIGENTE Y FUENTES CORREGIDAS ---
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
+        # Volvemos a cargarlo con links para no corromper la imagen
         wb = load_workbook("template.xlsx")
     except FileNotFoundError:
-        st.error("⚠️ The 'template.xlsx' file is missing from the repository.")
+        st.error("The 'template.xlsx' file is missing from the repository.")
         st.stop()
     
     sheet_name = "Points List" if "Points List" in wb.sheetnames else wb.sheetnames[0]
@@ -134,16 +135,22 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     
     start_row = 7 
     
-    # Extraer estilo diferenciado: Fila 7 para Títulos (Negrita) y Fila 8 para Items (Normal)
-    fuente_header = copy.copy(ws.cell(row=start_row, column=2).font)
-    fuente_item = copy.copy(ws.cell(row=start_row + 1, column=2).font)
+    # Extraer estilo base y crear la versión Normal y la versión Negrita de manera explícita
+    fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
+    
+    fuente_header = copy.copy(fuente_base)
+    fuente_header.bold = True
+    
+    fuente_item = copy.copy(fuente_base)
+    fuente_item.bold = False  # Esto arregla el bug de todo en negrita
+    
     borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
     alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
 
+    # Inyectar datos
     for idx, row_data in enumerate(datos):
         current_row = start_row + idx
         
-        # Determinar si la fila actual es un encabezado para aplicar la negrita
         desc = str(row_data.get("Description", "")).strip()
         part = str(row_data.get("Part No.", "")).strip()
         es_header = bool(desc) and not bool(part) and not tiene_puntos(row_data)
@@ -158,18 +165,41 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         for col_num, val in col_map.items():
             try:
                 cell = ws.cell(row=current_row, column=col_num, value=val)
-                # Aplicar negrita solo a los títulos, texto normal a los equipos
+                # Aplicamos la fuente forzadamente (Negrita al título, normal a las piezas)
                 cell.font = fuente_header if es_header else fuente_item
                 cell.border = borde_base
                 cell.alignment = alineacion_base
             except AttributeError:
                 pass
 
+    # --- LIMPIEZA AUTOMÁTICA DE FILAS VACÍAS ---
+    last_row = start_row + len(datos) - 1
+    delete_start = last_row + 1
+    ws.print_area = "" # Resetear área de impresión
+    
     if es_io_schedule:
-        last_row = start_row + len(datos) - 1
-        delete_start = last_row + 1
+        # En el I/O Schedule, borra todo lo demás
+        delete_amount = ws.max_row - delete_start + 1
+        if delete_amount > 0:
+            for mcr in list(ws.merged_cells.ranges):
+                if mcr.min_row >= delete_start:
+                    ws.merged_cells.remove(mcr)
+            ws.delete_rows(idx=delete_start, amount=delete_amount)
+    else:
+        # En la Cotización, recorre el Resumen ("BMS Requirements") hacia arriba
+        req_row = None
         for r in range(delete_start, ws.max_row + 1):
-            ws.row_dimensions[r].hidden = True
+            val = str(ws.cell(row=r, column=2).value).strip()
+            if val in ["BMS Requirements", "Summary"]:
+                req_row = r
+                break
+        
+        if req_row and req_row > delete_start:
+            delete_amount = req_row - delete_start
+            for mcr in list(ws.merged_cells.ranges):
+                if mcr.min_row >= delete_start and mcr.max_row < req_row:
+                    ws.merged_cells.remove(mcr)
+            ws.delete_rows(idx=delete_start, amount=delete_amount)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -214,10 +244,11 @@ if st.button("Generate Points List"):
             CRITICAL FORMATTING INSTRUCTIONS:
             1. Create a HEADER ROW for each main equipment group. (e.g., Description: "Boiler", Quantity: 2, MCC: "MCB". Leave AI, AO, DI, DO, Labour blank).
             2. Below the header row, list its components based on the ENGINEERING RULES.
-            3. IF A SYSTEM IS NOT IN THE RULES (e.g., Generators, Fire Alarms, VAVs), infer standard BEMS components for it (Enable DO, Status DI, Fault DI) and use "Device By Others" or "Volt Free Contacts" as the Part No.
-            4. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
-            5. Use the exact Part No. from the catalog.
-            6. Leave IOs or Labour as empty strings ("") if the value is 0.
+            3. CRITICAL RULE: For components (child rows), "Quantity" and "MCC" MUST be left completely blank (""). Only the HEADER ROW should contain the Quantity and MCC.
+            4. IF A SYSTEM IS NOT IN THE RULES (e.g., Generators, Fire Alarms, VAVs), infer standard BEMS components for it (Enable DO, Status DI, Fault DI) and use "Device By Others" or "Volt Free Contacts" as the Part No.
+            5. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
+            6. Use the exact Part No. from the catalog.
+            7. Leave IOs or Labour as empty strings ("") if the value is 0.
             
             User description: "{project_description}"
             
@@ -225,6 +256,9 @@ if st.button("Generate Points List"):
             [
               {{
                 "Description": "Storage Tank", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "MCB", "Quantity": 1, "Part No.": "", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": ""
+              }},
+              {{
+                "Description": "Tank Immersion Temperature Sensor", "AI": 1, "AO": "", "DI": "", "DO": "", "MCC": "", "Quantity": "", "Part No.": "TI/Brass Pocket", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": 50
               }}
             ]
             """
@@ -237,7 +271,7 @@ if st.button("Generate Points List"):
                 # --- EXCEL 1: DOCUMENTO COMPLETO ---
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
-                # --- EXCEL 2: I/O SCHEDULE (Lógica de Múltiples Encabezados Arreglada) ---
+                # --- EXCEL 2: I/O SCHEDULE (Lógica de Múltiples Encabezados) ---
                 datos_io = []
                 headers_pendientes = []
                 
@@ -249,7 +283,6 @@ if st.button("Generate Points List"):
                     if es_header:
                         headers_pendientes.append(row)
                     elif tiene_puntos(row):
-                        # Imprimir todos los encabezados pendientes antes del equipo
                         for h in headers_pendientes:
                             datos_io.append(h)
                         headers_pendientes = [] 
@@ -276,7 +309,7 @@ if st.session_state.generado:
     
     with col_btn1:
         st.download_button(
-            label="📄 Download Official Quotation (Full)",
+            label="Download Official Quotation (Full)",
             data=st.session_state.buffer_full,
             file_name=st.session_state.nombre_archivo,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -284,7 +317,7 @@ if st.session_state.generado:
         
     with col_btn2:
         st.download_button(
-            label="🔌 Download I/O Points Only (>0)",
+            label="Download I/O Points Only (>0)",
             data=st.session_state.buffer_filtrado,
             file_name=st.session_state.nombre_io,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

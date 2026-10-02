@@ -24,11 +24,11 @@ with st.sidebar:
     api_key = st.text_input("Enter API Key (Gemini):", type="password")
     
     st.markdown("---")
-    st.info("✅ Standard DC Controls template is pre-loaded from the cloud server.")
+    st.info("Standard DC Controls template is pre-loaded from the cloud server.")
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash') 
+    model = genai.GenerativeModel('gemini-3.6-flash') 
 
 # 2. Knowledge Base 
 engineering_rules = {
@@ -92,7 +92,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
         wb = load_workbook("template.xlsx")
     except FileNotFoundError:
-        st.error("⚠️ The 'template.xlsx' file is missing from the repository.")
+        st.error("The 'template.xlsx' file is missing from the repository.")
         st.stop()
     
     sheet_name = "Points List" if "Points List" in wb.sheetnames else wb.sheetnames[0]
@@ -246,7 +246,7 @@ if st.session_state.generado:
     
     with col_btn1:
         st.download_button(
-            label="📄 Download Official Quotation (Full)",
+            label="Download Official Quotation (Full)",
             data=st.session_state.buffer_full,
             file_name=st.session_state.nombre_archivo,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -254,7 +254,7 @@ if st.session_state.generado:
         
     with col_btn2:
         st.download_button(
-            label="🔌 Download I/O Points Only (>0)",
+            label="Download I/O Points Only (>0)",
             data=st.session_state.buffer_filtrado,
             file_name=st.session_state.nombre_io,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

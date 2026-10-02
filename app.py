@@ -24,7 +24,7 @@ with st.sidebar:
     api_key = st.text_input("Enter API Key (Gemini):", type="password")
     
     st.markdown("---")
-    st.info("Standard DC Controls template is pre-loaded from the cloud server.")
+    st.info("✅ Standard DC Controls template is pre-loaded from the cloud server.")
 
 if api_key:
     genai.configure(api_key=api_key)
@@ -117,13 +117,12 @@ component_catalog = {
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- FUNCIÓN MAESTRA CON LIMPIEZA INTELIGENTE Y FUENTES CORREGIDAS ---
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
-        # Volvemos a cargarlo con links para no corromper la imagen
+        # Cargamos el template con sus referencias originales intactas
         wb = load_workbook("template.xlsx")
     except FileNotFoundError:
-        st.error("The 'template.xlsx' file is missing from the repository.")
+        st.error("⚠️ The 'template.xlsx' file is missing from the repository.")
         st.stop()
     
     sheet_name = "Points List" if "Points List" in wb.sheetnames else wb.sheetnames[0]
@@ -135,19 +134,19 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     
     start_row = 7 
     
-    # Extraer estilo base y crear la versión Normal y la versión Negrita de manera explícita
+    # Fuentes diferenciadas para Títulos (Negrita) y Componentes (Normal)
     fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
     
     fuente_header = copy.copy(fuente_base)
     fuente_header.bold = True
     
     fuente_item = copy.copy(fuente_base)
-    fuente_item.bold = False  # Esto arregla el bug de todo en negrita
+    fuente_item.bold = False 
     
     borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
     alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
 
-    # Inyectar datos
+    # Inyección de Datos
     for idx, row_data in enumerate(datos):
         current_row = start_row + idx
         
@@ -165,41 +164,28 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         for col_num, val in col_map.items():
             try:
                 cell = ws.cell(row=current_row, column=col_num, value=val)
-                # Aplicamos la fuente forzadamente (Negrita al título, normal a las piezas)
+                # Aplicamos la fuente correctamente
                 cell.font = fuente_header if es_header else fuente_item
                 cell.border = borde_base
                 cell.alignment = alineacion_base
             except AttributeError:
                 pass
 
-    # --- LIMPIEZA AUTOMÁTICA DE FILAS VACÍAS ---
-    last_row = start_row + len(datos) - 1
-    delete_start = last_row + 1
-    ws.print_area = "" # Resetear área de impresión
-    
+    # --- LIMPIEZA EXCLUSIVAMENTE PARA EL I/O SCHEDULE ---
     if es_io_schedule:
-        # En el I/O Schedule, borra todo lo demás
+        last_row = start_row + len(datos) - 1
+        delete_start = last_row + 1
+        ws.print_area = "" # Resetear área de impresión
+        
         delete_amount = ws.max_row - delete_start + 1
         if delete_amount > 0:
             for mcr in list(ws.merged_cells.ranges):
                 if mcr.min_row >= delete_start:
                     ws.merged_cells.remove(mcr)
             ws.delete_rows(idx=delete_start, amount=delete_amount)
-    else:
-        # En la Cotización, recorre el Resumen ("BMS Requirements") hacia arriba
-        req_row = None
-        for r in range(delete_start, ws.max_row + 1):
-            val = str(ws.cell(row=r, column=2).value).strip()
-            if val in ["BMS Requirements", "Summary"]:
-                req_row = r
-                break
-        
-        if req_row and req_row > delete_start:
-            delete_amount = req_row - delete_start
-            for mcr in list(ws.merged_cells.ranges):
-                if mcr.min_row >= delete_start and mcr.max_row < req_row:
-                    ws.merged_cells.remove(mcr)
-            ws.delete_rows(idx=delete_start, amount=delete_amount)
+            
+    # Si NO es I/O Schedule (es la Cotización principal), simplemente NO hace nada con las filas, 
+    # dejando el resumen, precios y notas exactamente donde estaban.
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -268,10 +254,10 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- EXCEL 1: DOCUMENTO COMPLETO ---
+                # --- EXCEL 1: DOCUMENTO COMPLETO (Intacto al final) ---
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
-                # --- EXCEL 2: I/O SCHEDULE (Lógica de Múltiples Encabezados) ---
+                # --- EXCEL 2: I/O SCHEDULE (Cortado y Filtrado) ---
                 datos_io = []
                 headers_pendientes = []
                 
@@ -309,7 +295,7 @@ if st.session_state.generado:
     
     with col_btn1:
         st.download_button(
-            label="Download Official Quotation (Full)",
+            label="📄 Download Official Quotation (Full)",
             data=st.session_state.buffer_full,
             file_name=st.session_state.nombre_archivo,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -317,7 +303,7 @@ if st.session_state.generado:
         
     with col_btn2:
         st.download_button(
-            label="Download I/O Points Only (>0)",
+            label="🔌 Download I/O Schedule Only (>0)",
             data=st.session_state.buffer_filtrado,
             file_name=st.session_state.nombre_io,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

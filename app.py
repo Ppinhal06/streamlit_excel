@@ -87,7 +87,7 @@ component_catalog = {
     "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- FUNCIÓN MAESTRA ---
+# --- FUNCIÓN MAESTRA (ESTRUCTURA SEGURA) ---
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
         wb = load_workbook("template.xlsx", keep_links=False)
@@ -105,6 +105,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
     reference_styles = {}
     
+    # Extraer estilos UNA SOLA VEZ para no saturar la memoria de Excel
     for col in range(2, 13): 
         cell = ws.cell(row=start_row, column=col)
         if type(cell).__name__ != 'MergedCell':
@@ -115,6 +116,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 'alignment': copy.copy(cell.alignment)
             }
 
+    # Inyectar los datos
     for idx, row_data in enumerate(datos):
         current_row = start_row + idx
         col_map = {
@@ -127,27 +129,25 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         for col_num, val in col_map.items():
             try:
                 cell = ws.cell(row=current_row, column=col_num, value=val)
+                # Asignar el estilo referenciado (Sin volver a copiarlo para no trabar el Excel)
                 if col_num in reference_styles:
-                    cell.font = copy.copy(reference_styles[col_num]['font'])
-                    cell.border = copy.copy(reference_styles[col_num]['border'])
-                    cell.fill = copy.copy(reference_styles[col_num]['fill'])
-                    cell.alignment = copy.copy(reference_styles[col_num]['alignment'])
+                    cell.font = reference_styles[col_num]['font']
+                    cell.border = reference_styles[col_num]['border']
+                    cell.fill = reference_styles[col_num]['fill']
+                    cell.alignment = reference_styles[col_num]['alignment']
             except AttributeError:
                 pass
 
-    # --- LIMPIEZA DE FILAS (SOLO PARA EL I/O SCHEDULE) ---
+    # --- LIMPIEZA SEGURA (OCULTAR FILAS EN LUGAR DE BORRARLAS) ---
+    # Esto previene el mensaje de archivo corrupto de Excel
     if es_io_schedule:
         last_row = start_row + len(datos) - 1
         delete_start = last_row + 1
-        ws.print_area = "" 
         
-        delete_amount = ws.max_row - delete_start + 1
-        if delete_amount > 0:
-            merged_ranges = list(ws.merged_cells.ranges)
-            for mcr in merged_ranges:
-                if mcr.min_row >= delete_start:
-                    ws.merged_cells.remove(mcr)
-            ws.delete_rows(idx=delete_start, amount=delete_amount)
+        # Ocultar todas las filas restantes para que el documento se vea limpio 
+        # pero el XML original no se rompa
+        for r in range(delete_start, ws.max_row + 1):
+            ws.row_dimensions[r].hidden = True
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -211,10 +211,10 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- EXCEL 1: DOCUMENTO COMPLETO (Intacto) ---
+                # --- EXCEL 1: DOCUMENTO COMPLETO ---
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
-                # --- EXCEL 2: I/O SCHEDULE (Filtrado y recortado) ---
+                # --- EXCEL 2: I/O SCHEDULE (Filtrado) ---
                 datos_io = []
                 header_temporal = None
                 

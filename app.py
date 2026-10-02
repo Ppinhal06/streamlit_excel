@@ -24,13 +24,13 @@ with st.sidebar:
     api_key = st.text_input("Enter API Key (Gemini):", type="password")
     
     st.markdown("---")
-    st.info("Standard DC Controls template is pre-loaded from the cloud server.")
+    st.info("✅ Standard DC Controls template is pre-loaded from the cloud server.")
 
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# 2. Knowledge Base 
+# 2. Base de Conocimiento Expandida (Ahora incluye Tanques, Chillers, Medidores, etc.)
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {
         "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
@@ -52,10 +52,22 @@ engineering_rules = {
     },
     "FCU (Fan Coil Unit)": {
         "per_unit": ["Space Temperature Sensor", "Control Valve Actuator"]
+    },
+    "Storage Tank (Cold Water / Mains)": {
+        "per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]
+    },
+    "Chiller": {
+        "per_unit": ["Chiller Enable", "Chiller Status", "Chiller Flow Switch", "Chiller Flow Temp Sensor", "Chiller Return Temp Sensor"]
+    },
+    "Extract Fan": {
+        "per_unit": ["Fan Enable", "Fan Current Switch"]
+    },
+    "Metering": {
+        "mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]
     }
 }
 
-# 3. Technical Catalog 
+# 3. Technical Catalog (Expandido)
 component_catalog = {
     "Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
@@ -84,15 +96,33 @@ component_catalog = {
     "Control Valve Actuator": {"Part": "MVC / DB_VZ", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
     "Supply Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Return Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
+    "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Low Low Level Status": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Section 1 Low Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Section 1 High Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Section 2 Low Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Section 2 High Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Solenoid Valve 40mm": {"Part": "Solenoid Valve 40mm / ZS50", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Ultrasonic Level Transmitter": {"Part": "LS-MC", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Chiller Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Flow Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Return Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Fan Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Fan Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Gas Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Water Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- FUNCIÓN MAESTRA (ESTRUCTURA SEGURA Y LIGERA) ---
+# --- FUNCIÓN MAESTRA CON ESTILOS CORREGIDOS ---
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
         wb = load_workbook("template.xlsx")
     except FileNotFoundError:
-        st.error("The 'template.xlsx' file is missing from the repository.")
+        st.error("⚠️ The 'template.xlsx' file is missing from the repository.")
         st.stop()
     
     sheet_name = "Points List" if "Points List" in wb.sheetnames else wb.sheetnames[0]
@@ -104,14 +134,20 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     
     start_row = 7 
     
-    # Extraer estilo base una sola vez desde la primera celda descriptiva para no saturar el XML
-    fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
+    # Extraer estilo diferenciado: Fila 7 para Títulos (Negrita) y Fila 8 para Items (Normal)
+    fuente_header = copy.copy(ws.cell(row=start_row, column=2).font)
+    fuente_item = copy.copy(ws.cell(row=start_row + 1, column=2).font)
     borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
     alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
 
-    # Inyectar los datos
     for idx, row_data in enumerate(datos):
         current_row = start_row + idx
+        
+        # Determinar si la fila actual es un encabezado para aplicar la negrita
+        desc = str(row_data.get("Description", "")).strip()
+        part = str(row_data.get("Part No.", "")).strip()
+        es_header = bool(desc) and not bool(part) and not tiene_puntos(row_data)
+
         col_map = {
             2: row_data.get("Description", ""), 3: row_data.get("AI", ""), 4: row_data.get("AO", ""),
             5: row_data.get("DI", ""), 6: row_data.get("DO", ""), 7: row_data.get("MCC", ""),
@@ -122,20 +158,16 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         for col_num, val in col_map.items():
             try:
                 cell = ws.cell(row=current_row, column=col_num, value=val)
-                # Aplicar el estilo base uniformemente
-                cell.font = fuente_base
+                # Aplicar negrita solo a los títulos, texto normal a los equipos
+                cell.font = fuente_header if es_header else fuente_item
                 cell.border = borde_base
                 cell.alignment = alineacion_base
             except AttributeError:
-                # Ignora silenciosamente si choca con una celda combinada preexistente
                 pass
 
-    # --- LIMPIEZA SEGURA (OCULTAR FILAS EN LUGAR DE BORRARLAS) ---
     if es_io_schedule:
         last_row = start_row + len(datos) - 1
         delete_start = last_row + 1
-        
-        # Ocultar todas las filas restantes previene la corrupción de celdas combinadas al final del documento
         for r in range(delete_start, ws.max_row + 1):
             ws.row_dimensions[r].hidden = True
 
@@ -158,7 +190,7 @@ with col1:
 with col2:
     project_description = st.text_area(
         "Project Scope Description:", 
-        placeholder="Example: We need a plant with 2 Boilers, 3 Primary Pumps, 2 LPHW Pressurisation Units, and 1 Calorifier."
+        placeholder="Example: We need a plant with 2 Boilers, 3 Primary Pumps, 1 Storage Tank, and Metering."
     )
 
 st.markdown("---")
@@ -173,7 +205,7 @@ if st.button("Generate Points List"):
             prompt = f"""
             You are an expert BEMS estimator working for DC Controls. Generate a Points List based on the description, mimicking the exact style of the "IDA Cavan" project.
             
-            ENGINEERING RULES:
+            ENGINEERING RULES (Known Systems):
             {json.dumps(engineering_rules, indent=2)}
             
             TECHNICAL CATALOG:
@@ -182,19 +214,17 @@ if st.button("Generate Points List"):
             CRITICAL FORMATTING INSTRUCTIONS:
             1. Create a HEADER ROW for each main equipment group. (e.g., Description: "Boiler", Quantity: 2, MCC: "MCB". Leave AI, AO, DI, DO, Labour blank).
             2. Below the header row, list its components based on the ENGINEERING RULES.
-            3. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
-            4. Use the exact Part No. from the catalog.
-            5. Leave IOs or Labour as empty strings ("") if the value is 0.
+            3. IF A SYSTEM IS NOT IN THE RULES (e.g., Generators, Fire Alarms, VAVs), infer standard BEMS components for it (Enable DO, Status DI, Fault DI) and use "Device By Others" or "Volt Free Contacts" as the Part No.
+            4. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
+            5. Use the exact Part No. from the catalog.
+            6. Leave IOs or Labour as empty strings ("") if the value is 0.
             
             User description: "{project_description}"
             
             Return ONLY a JSON array matching the standard columns. DO NOT use markdown. You MUST use these exact keys:
             [
               {{
-                "Description": "Boiler", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "MCB", "Quantity": 2, "Part No.": "", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": ""
-              }},
-              {{
-                "Description": "Boiler Enable", "AI": "", "AO": "", "DI": "", "DO": 2, "MCC": "", "Quantity": "", "Part No.": "Volt Free Contacts", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": 100
+                "Description": "Storage Tank", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "MCB", "Quantity": 1, "Part No.": "", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": ""
               }}
             ]
             """
@@ -204,25 +234,25 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- EXCEL 1: DOCUMENTO COMPLETO (Intacto) ---
+                # --- EXCEL 1: DOCUMENTO COMPLETO ---
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
-                # --- EXCEL 2: I/O SCHEDULE (Filtrado y con filas ocultas) ---
+                # --- EXCEL 2: I/O SCHEDULE (Lógica de Múltiples Encabezados Arreglada) ---
                 datos_io = []
-                header_temporal = None
+                headers_pendientes = []
                 
                 for row in materials_data:
                     desc = str(row.get("Description", "")).strip()
                     part = str(row.get("Part No.", "")).strip()
-                    
                     es_header = bool(desc) and not bool(part) and not tiene_puntos(row)
                     
                     if es_header:
-                        header_temporal = row
+                        headers_pendientes.append(row)
                     elif tiene_puntos(row):
-                        if header_temporal:
-                            datos_io.append(header_temporal)
-                            header_temporal = None 
+                        # Imprimir todos los encabezados pendientes antes del equipo
+                        for h in headers_pendientes:
+                            datos_io.append(h)
+                        headers_pendientes = [] 
                         datos_io.append(row)
 
                 buffer_filtrado = crear_excel_formateado(datos_io, project_name, es_io_schedule=True)
@@ -246,7 +276,7 @@ if st.session_state.generado:
     
     with col_btn1:
         st.download_button(
-            label="Download Official Quotation (Full)",
+            label="📄 Download Official Quotation (Full)",
             data=st.session_state.buffer_full,
             file_name=st.session_state.nombre_archivo,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -254,7 +284,7 @@ if st.session_state.generado:
         
     with col_btn2:
         st.download_button(
-            label="Download I/O Points Only (>0)",
+            label="🔌 Download I/O Points Only (>0)",
             data=st.session_state.buffer_filtrado,
             file_name=st.session_state.nombre_io,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

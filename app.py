@@ -42,50 +42,50 @@ engineering_rules = {
 }
 
 component_catalog = {
-    "Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
-    "Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
-    "Outside Frost Thermostat": {"Part": "DBET-23U", "Labour": 50},
-    "Outside Temperature Sensor": {"Part": "TB/TO", "Labour": 50},
-    "Immersion Frost Thermostat": {"Part": "DBTV-2U", "Labour": 50},
-    "Boiler Enable": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Boiler Common Fault": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Boiler Control Signal": {"Part": "0…10V dc", "Labour": 50},
-    "Boiler Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
-    "Boiler Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
-    "Pump Enable": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Pump Status": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Variable Speed Drive": {"Part": "Built in to Pump", "Labour": 50},
-    "Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
-    "3 Port Control Valve / Actuator": {"Part": "Valve 40mm", "Labour": 50},
-    "Pressurisation Unit High Pressure": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Pressurisation Unit Low Pressure": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Enable": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Common Fault": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Status": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Control Signal": {"Part": "0…10V dc", "Labour": 50},
-    "Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "Labour": 50},
-    "High Limit Thermostat (60-95 Man. Reset)": {"Part": "RAK TW 1000B", "Labour": 50},
-    "Space Temperature Sensor": {"Part": "RS-Temp", "Labour": 50},
-    "Control Valve Actuator": {"Part": "MVC / DB_VZ", "Labour": 50},
-    "Supply Air Temp Sensor": {"Part": "Duct Temp Sensor", "Labour": 50},
-    "Return Air Temp Sensor": {"Part": "Duct Temp Sensor", "Labour": 50},
-    "Frost Stat": {"Part": "DBET-23U", "Labour": 50},
-    "Tank Low Low Level Status": {"Part": "LL13 (3M Cable)", "Labour": 50},
-    "Tank Section 1 Low Level": {"Part": "LL13 (3M Cable)", "Labour": 50},
-    "Tank Section 1 High Level": {"Part": "LL13 (3M Cable)", "Labour": 50},
-    "Tank Section 2 Low Level": {"Part": "LL13 (3M Cable)", "Labour": 50},
-    "Tank Section 2 High Level": {"Part": "LL13 (3M Cable)", "Labour": 50},
-    "Tank Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "Labour": 50},
-    "Solenoid Valve 40mm": {"Part": "Solenoid Valve 40mm / ZS50", "Labour": 50},
-    "Ultrasonic Level Transmitter": {"Part": "LS-MC", "Labour": 50},
-    "Chiller Enable and Status": {"Part": "Volt Free Contacts", "Labour": 50},
-    "Chiller Flow Switch": {"Part": "FS 541", "Labour": 50},
-    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
-    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
-    "Enable and Current Switch": {"Part": "RIBXKTF", "Labour": 50},
-    "Gas Meter Pulsed Input": {"Part": "Device By Others", "Labour": 50},
-    "Water Meter Pulsed Input": {"Part": "Device By Others", "Labour": 50},
-    "Electricity Meter Pulsed Input": {"Part": "Device By Others", "Labour": 50}
+    "Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Outside Frost Thermostat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Outside Temperature Sensor": {"Part": "TB/TO", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Immersion Frost Thermostat": {"Part": "DBTV-2U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Boiler Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Boiler Common Fault": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Boiler Control Signal": {"Part": "0…10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Boiler Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Boiler Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Pump Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Pump Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Variable Speed Drive": {"Part": "Built in to Pump", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "3 Port Control Valve / Actuator": {"Part": "Valve 40mm", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Pressurisation Unit High Pressure": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Pressurisation Unit Low Pressure": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Common Fault": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Control Signal": {"Part": "0…10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "High Limit Thermostat (60-95 Man. Reset)": {"Part": "RAK TW 1000B", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Space Temperature Sensor": {"Part": "RS-Temp", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Control Valve Actuator": {"Part": "MVC / DB_VZ", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
+    "Supply Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Return Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Low Low Level Status": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Section 1 Low Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Section 1 High Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Section 2 Low Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Section 2 High Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Tank Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Solenoid Valve 40mm": {"Part": "Solenoid Valve 40mm / ZS50", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Ultrasonic Level Transmitter": {"Part": "LS-MC", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Enable and Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Enable and Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 1, "Labour": 50},
+    "Gas Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Water Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
 def tiene_puntos(row):
@@ -163,7 +163,6 @@ def actualizar_formulas(ws, green_idx, total_insert):
     for r in range(1, ws.max_row + 1):
         for c in range(1, 15):
             cell = ws.cell(row=r, column=c)
-            # Candado contra MergedCells en la actualización
             if not isinstance(cell, MergedCell) and isinstance(cell.value, str) and cell.value.startswith("="):
                 new_formula = re.sub(r'([A-Z]{1,2})([0-9]+)', replacer, cell.value)
                 if cell.value != new_formula:
@@ -191,7 +190,6 @@ def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
             source_cell = ws.cell(row=source_row, column=c)
             target_cell = ws.cell(row=target_row, column=c)
             
-            # Candado estético
             if isinstance(target_cell, MergedCell) or isinstance(source_cell, MergedCell):
                 continue
                 
@@ -223,6 +221,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
 
     if not es_io_schedule:
+        # === MANTENEMOS EL QUOTATION INTACTO Y PERFECTO ===
         req_row = ws.max_row
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
@@ -337,7 +336,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
-                
                 actualizar_formulas(ws, green_row_idx, total_insert)
                 reparar_celdas_combinadas(ws, green_row_idx, total_insert)
                 
@@ -390,7 +388,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # Candado para que la limpieza del I/O Schedule no borre las celdas combinadas de abajo
+        # === NUEVA DINÁMICA PERFECTA I/O SCHEDULE (BOM) ===
         for r in range(start_row, ws.max_row + 1):
             for c in [2, 3, 4, 5, 6, 7, 8, 9]:
                 cell = ws.cell(row=r, column=c)
@@ -400,6 +398,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         aggregated_io = {}
         ai_groups_io = []
         current_ai_parent_io = None
+        
         for item in datos:
             desc = str(item.get("Description", "")).strip()
             part = str(item.get("Part No.", "")).strip()
@@ -440,12 +439,22 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                 if v.get("Part", "").strip().lower() == part_no.strip().lower():
                                     clean_desc = k.replace("Boiler ", "").replace("Chiller ", "").replace("Header ", "").replace("Pump ", "")
                                     break
+                    
+                    # Obtenemos los puntos base para 1 sola pieza desde el catálogo o inferidos
+                    def get_val(val):
+                        v = str(val).strip()
+                        return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
+                        
+                    base_ai = cat_item.get("AI", 0) if cat_item else (1 if get_val(child.get("AI", 0)) > 0 else 0)
+                    base_ao = cat_item.get("AO", 0) if cat_item else (1 if get_val(child.get("AO", 0)) > 0 else 0)
+                    base_di = cat_item.get("DI", 0) if cat_item else (1 if get_val(child.get("DI", 0)) > 0 else 0)
+                    base_do = cat_item.get("DO", 0) if cat_item else (1 if get_val(child.get("DO", 0)) > 0 else 0)
                                 
                     aggregated_io[agg_key] = {
                         "Description": clean_desc,
                         "Part No.": part_no,
                         "Quantity": 0,
-                        "AI": 0, "AO": 0, "DI": 0, "DO": 0,
+                        "AI": base_ai, "AO": base_ao, "DI": base_di, "DO": base_do,
                         "Breakdown": {} 
                     }
                     
@@ -453,25 +462,30 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     v = str(val).strip()
                     return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
                 
-                ai = get_val(child.get("AI", 0))
-                ao = get_val(child.get("AO", 0))
-                di = get_val(child.get("DI", 0))
-                do = get_val(child.get("DO", 0))
+                ai_total = get_val(child.get("AI", 0))
+                ao_total = get_val(child.get("AO", 0))
+                di_total = get_val(child.get("DI", 0))
+                do_total = get_val(child.get("DO", 0))
                 
-                aggregated_io[agg_key]["AI"] += ai
-                aggregated_io[agg_key]["AO"] += ao
-                aggregated_io[agg_key]["DI"] += di
-                aggregated_io[agg_key]["DO"] += do
+                # Calculamos piezas reales dividiendo el total de la IA entre el valor base
+                b_ai = aggregated_io[agg_key]["AI"]
+                b_ao = aggregated_io[agg_key]["AO"]
+                b_di = aggregated_io[agg_key]["DI"]
+                b_do = aggregated_io[agg_key]["DO"]
                 
-                line_qty = max(ai, ao, di, do)
-                if line_qty == 0:
-                    line_qty = p_qty
+                pieces = 0
+                if b_ai > 0: pieces = ai_total // b_ai
+                elif b_ao > 0: pieces = ao_total // b_ao
+                elif b_di > 0: pieces = di_total // b_di
+                elif b_do > 0: pieces = do_total // b_do
+                
+                if pieces == 0: pieces = p_qty
                     
-                aggregated_io[agg_key]["Quantity"] += line_qty
+                aggregated_io[agg_key]["Quantity"] += pieces
                 
                 if p_name not in aggregated_io[agg_key]["Breakdown"]:
                     aggregated_io[agg_key]["Breakdown"][p_name] = 0
-                aggregated_io[agg_key]["Breakdown"][p_name] += line_qty
+                aggregated_io[agg_key]["Breakdown"][p_name] += pieces
 
         datos_io_procesados = []
         datos_io_procesados.append({
@@ -483,17 +497,22 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         
         for k in sorted_keys:
             data = aggregated_io[k]
+            # EL GRAN SECRETO: Inyectamos el desglose en el recuadro verde (AI, AO, DI, DO) y la cantidad en el recuadro azul
             breakdown_str = " + ".join([f"{sys}: {q}" for sys, q in data["Breakdown"].items()])
-            final_desc = f"{data['Description']}  [{breakdown_str}]"
+            
+            final_ai = breakdown_str if data["AI"] > 0 else ""
+            final_ao = breakdown_str if data["AO"] > 0 else ""
+            final_di = breakdown_str if data["DI"] > 0 else ""
+            final_do = breakdown_str if data["DO"] > 0 else ""
             
             datos_io_procesados.append({
-                "Description": final_desc,
+                "Description": data["Description"],
                 "Part No.": data["Part No."],
                 "Quantity": data["Quantity"] if data["Quantity"] > 0 else "",
-                "AI": data["AI"] if data["AI"] > 0 else "",
-                "AO": data["AO"] if data["AO"] > 0 else "",
-                "DI": data["DI"] if data["DI"] > 0 else "",
-                "DO": data["DO"] if data["DO"] > 0 else "",
+                "AI": final_ai,
+                "AO": final_ao,
+                "DI": final_di,
+                "DO": final_do,
                 "MCC": ""
             })
 

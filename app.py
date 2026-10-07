@@ -151,10 +151,8 @@ def actualizar_formulas(ws, green_idx, total_insert):
         col = match.group(1)
         row_num = int(match.group(2))
         
-        # Si la fórmula apuntaba a la línea verde (o cualquier cosa debajo de ella), la bajamos
         if row_num >= green_idx:
             return f"{col}{row_num + total_insert}"
-        # Si la fórmula es el final de un rango (ej. =SUM(C2:C285) donde la línea verde es la 286), la estiramos para que atrape a los FCUs
         if row_num == green_idx - 1:
             return f"{col}{row_num + total_insert}"
             
@@ -167,6 +165,21 @@ def actualizar_formulas(ws, green_idx, total_insert):
                 new_formula = re.sub(r'([A-Z]{1,2})([0-9]+)', replacer, cell.value)
                 if cell.value != new_formula:
                     cell.value = new_formula
+
+# CLONADOR PERFECTO DE ESTILOS COLUMNA POR COLUMNA
+def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
+    for c in range(1, 15):
+        try:
+            fuente = copy.copy(ws.cell(row=source_row, column=c).font)
+            if c == 2: fuente.bold = es_padre # Negrita solo en la columna B si es padre
+            
+            ws.cell(row=target_row, column=c).font = fuente
+            ws.cell(row=target_row, column=c).border = copy.copy(ws.cell(row=source_row, column=c).border)
+            ws.cell(row=target_row, column=c).alignment = copy.copy(ws.cell(row=source_row, column=c).alignment)
+            ws.cell(row=target_row, column=c).fill = copy.copy(ws.cell(row=source_row, column=c).fill)
+            ws.cell(row=target_row, column=c).number_format = ws.cell(row=source_row, column=c).number_format
+        except AttributeError:
+            pass
 
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
@@ -202,7 +215,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         if green_row_idx == ws.max_row:
             green_row_idx = req_row
                 
-        # Limpieza estricta: NO se tocan las columnas 9, 10, 11, 12 para preservar precios nativos
+        # Limpieza estricta
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8]:
                 ws.cell(row=r, column=c).value = None 
@@ -281,23 +294,12 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
-                
-                # LA MAGIA QUE REPARA LOS TOTALES (BMS REQUIREMENTS)
                 actualizar_formulas(ws, green_row_idx, total_insert)
-                
-                fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
-                fuente_header = copy.copy(fuente_base)
-                fuente_header.bold = True
-                fuente_item = copy.copy(fuente_base)
-                fuente_item.bold = False 
-                borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
-                alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
                 
                 current_insert_row = green_row_idx
                 for org in orphans_to_insert:
                     p_item = org["parent"]
                     titulo = p_item.get("Description", "")
-                    
                     qty_str = str(p_item.get("Quantity", "1")).strip()
                     parent_qty = int(qty_str) if qty_str.isdigit() else 1
                     
@@ -306,10 +308,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         ws.cell(row=current_insert_row, column=7, value=p_item.get("MCC", ""))
                         ws.cell(row=current_insert_row, column=8, value=p_item.get("Quantity", ""))
                         
-                    for c in range(2, 13):
-                        ws.cell(row=current_insert_row, column=c).font = fuente_header
-                        ws.cell(row=current_insert_row, column=c).border = borde_base
-                        ws.cell(row=current_insert_row, column=c).alignment = alineacion_base
+                    clonar_estilo_columna(ws, green_row_idx - 1, current_insert_row, es_padre=True)
                     current_insert_row += 1
                     
                     for child in org["children"]:
@@ -320,7 +319,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
                         ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
                         
-                        # INYECCIÓN FINAL DE PRECIOS PARA HUÉRFANOS
                         cat_item = get_catalog_data(ai_c_desc)
                         part_no = child.get("Part No.", "")
                         if not part_no and cat_item: part_no = cat_item.get("Part", "")
@@ -331,21 +329,10 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         if part_no: ws.cell(row=current_insert_row, column=9).value = part_no
                         if calc_labour > 0: ws.cell(row=current_insert_row, column=12).value = calc_labour
                         
-                        for c in range(2, 13):
-                            ws.cell(row=current_insert_row, column=c).font = fuente_item
-                            ws.cell(row=current_insert_row, column=c).border = borde_base
-                            ws.cell(row=current_insert_row, column=c).alignment = alineacion_base
+                        clonar_estilo_columna(ws, green_row_idx - 1, current_insert_row, es_padre=False)
                         current_insert_row += 1
 
     else:
-        fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
-        fuente_header = copy.copy(fuente_base)
-        fuente_header.bold = True
-        fuente_item = copy.copy(fuente_base)
-        fuente_item.bold = False 
-        borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
-        alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
-
         for idx, row_data in enumerate(datos):
             current_row = start_row + idx
             desc = str(row_data.get("Description", "")).strip()
@@ -359,13 +346,10 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 11: row_data.get("Parts At 0%", ""), 12: row_data.get("Labour At 20%", "")
             }
             for col_num, val in col_map.items():
-                try:
-                    cell = ws.cell(row=current_row, column=col_num, value=val)
-                    cell.font = fuente_header if es_header else fuente_item
-                    cell.border = borde_base
-                    cell.alignment = alineacion_base
-                except AttributeError:
-                    pass
+                ws.cell(row=current_row, column=col_num, value=val)
+            
+            # Formateo rápido y parejo para el I/O
+            clonar_estilo_columna(ws, start_row, current_row, es_padre=es_header)
 
         last_row = start_row + len(datos) - 1
         delete_start = last_row + 1
@@ -464,6 +448,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
         st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

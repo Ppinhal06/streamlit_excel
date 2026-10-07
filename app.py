@@ -9,9 +9,12 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 
+# 1. UI Configuration & API
 st.set_page_config(page_title="BEMS Estimator Pro - DC Controls", layout="wide")
+
 st.title("Automated BEMS Points List & Estimator")
 st.markdown("---")
+st.markdown("Professional generator with dynamic Excel template injection.")
 
 if "generado" not in st.session_state:
     st.session_state.generado = False
@@ -20,23 +23,47 @@ with st.sidebar:
     st.header("System Configuration")
     api_key = st.text_input("Enter API Key (Gemini):", type="password")
     st.markdown("---")
+    st.info("✅ Standard DC Controls template is pre-loaded from the cloud server.")
 
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
+# 2. Base de Conocimiento
 engineering_rules = {
-    "Common LPHW/CHW Devices (System Level)": {"mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
-    "Boiler": {"per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]},
-    "Pump (Primary/Secondary)": {"per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]},
-    "Pressurisation Unit": {"per_unit": ["Pressurisation Unit High Pressure", "Pressurisation Unit Low Pressure"]},
-    "Calorifier / Hot Water Generator": {"per_unit": ["Enable", "Common Fault", "Control Signal", "Immersion Temperature Sensor", "High Limit Thermostat (60-95 Man. Reset)"]},
-    "AHU (Air Handling Unit)": {"per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temp Sensor", "Return Air Temp Sensor", "Frost Stat"]},
-    "FCU (Fan Coil Unit)": {"per_unit": ["Space Temperature Sensor", "Control Valve Actuator"]},
-    "Storage Tank (Cold Water / Mains)": {"per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]},
-    "Chiller": {"per_unit": ["Chiller Enable and Status", "Chiller Flow Switch", "Chiller Flow Immersion Temperature Sensor", "Chiller Return Immersion Temperature Sensor"]},
-    "Extract Fan": {"per_unit": ["Enable and Current Switch"]},
-    "Metering": {"mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]}
+    "Common LPHW/CHW Devices (System Level)": {
+        "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
+    },
+    "Boiler": {
+        "per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]
+    },
+    "Pump (Primary/Secondary)": {
+        "per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]
+    },
+    "Pressurisation Unit": {
+        "per_unit": ["Pressurisation Unit High Pressure", "Pressurisation Unit Low Pressure"]
+    },
+    "Calorifier / Hot Water Generator": {
+        "per_unit": ["Enable", "Common Fault", "Control Signal", "Immersion Temperature Sensor", "High Limit Thermostat (60-95 Man. Reset)"]
+    },
+    "AHU (Air Handling Unit)": {
+        "per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temp Sensor", "Return Air Temp Sensor", "Frost Stat"]
+    },
+    "FCU (Fan Coil Unit)": {
+        "per_unit": ["Space Temperature Sensor", "Control Valve Actuator"]
+    },
+    "Storage Tank (Cold Water / Mains)": {
+        "per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]
+    },
+    "Chiller": {
+        "per_unit": ["Chiller Enable and Status", "Chiller Flow Switch", "Chiller Flow Immersion Temperature Sensor", "Chiller Return Immersion Temperature Sensor"]
+    },
+    "Extract Fan": {
+        "per_unit": ["Enable and Current Switch"]
+    },
+    "Metering": {
+        "mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]
+    }
 }
 
 component_catalog = {
@@ -114,6 +141,7 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
     if "chiller" in ai and (tpl == "chiller" or tpl == "chillers"): return True
     if "extract fan" in ai and "extract fan" in tpl: return True
     if "metering" in ai and "metering" in tpl: return True
+    
     return False
 
 def fuzzy_match_strict(ai_str, tpl_str):
@@ -122,6 +150,7 @@ def fuzzy_match_strict(ai_str, tpl_str):
     
     ai_words = set(re.findall(r'[a-z0-9]+', ai_orig))
     tpl_words = set(re.findall(r'[a-z0-9]+', tpl_orig))
+    
     if not ai_words or not tpl_words: return False
 
     if len(ai_words) <= 2:
@@ -181,8 +210,11 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         if green_row_idx == ws.max_row:
             green_row_idx = req_row
                 
+        # AQUÍ ESTABA MI ERROR MORTAL.
+        # YA NO BORRAMOS LAS COLUMNAS 9, 10, 11 Y 12 PORQUE AHÍ VIVEN TUS FÓRMULAS DE EXCEL Y TUS PRECIOS.
+        # Solo vaciamos las columnas de IA y Cantidades.
         for r in range(start_row, req_row):
-            for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
+            for c in [3, 4, 5, 6, 7, 8]:
                 ws.cell(row=r, column=c).value = None 
 
         ai_groups = []
@@ -203,6 +235,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             for r in range(start_row, req_row):
                 desc_cell = ws.cell(row=r, column=2).value
                 part_cell = ws.cell(row=r, column=9).value
+                
                 if desc_cell and not part_cell:
                     if fuzzy_match_parent(ai_p_desc, desc_cell):
                         if not any(g.get("best_match_row") == r for g in ai_groups):
@@ -217,12 +250,16 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             next_boundary = matched_groups[i+1]["best_match_row"] if i + 1 < len(matched_groups) else green_row_idx
             
             p_item = group["parent"]
-            ws.cell(row=best_match_row, column=2).value = p_item.get("Description", "")
+            ai_p_desc = p_item.get("Description", "")
+            
+            # LIMPIEZA EXCLUSIVA PARA NOMBRES RAROS (Extract Fan - XXXXXXXX)
+            # Todo lo demás respeta la elegancia de tu plantilla original
+            tpl_name = str(ws.cell(row=best_match_row, column=2).value or "")
+            if "XXXX" in tpl_name or "??" in tpl_name:
+                ws.cell(row=best_match_row, column=2).value = ai_p_desc
+            
             ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
             ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
-            
-            qty_str = str(p_item.get("Quantity", "1")).strip()
-            parent_qty = int(qty_str) if qty_str.isdigit() else 1
             
             missing_children = []
             for child in group["children"]:
@@ -239,15 +276,8 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                 if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
                                 if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
                                 
-                                # CÁLCULO ESTRICTO DE PRECIO EN PLANTILLA ORIGINARIA
-                                cat_item = get_catalog_data(ai_c_desc)
-                                part_no = cat_item.get("Part", "") if cat_item else ""
-                                base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
-                                calc_labour = base_labour * parent_qty
-                                
-                                if part_no: ws.cell(row=cr, column=9).value = part_no
-                                if calc_labour > 0: ws.cell(row=cr, column=12).value = calc_labour
-                                
+                                # NO TOCAMOS EL LABOUR NI EL PART NUMBER AQUÍ.
+                                # ¡EXCEL LOS VA A CALCULAR SOLITO CON SUS FÓRMULAS ORIGINALES!
                                 child_matched = True
                                 break 
                                 
@@ -261,8 +291,10 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             if not group.get("best_match_row"):
                 orphans_to_insert.append({"parent": group["parent"], "children": group["children"], "is_partial": False})
 
+        # --- INYECCIÓN DE HUÉRFANOS (COMO LOS FCUS) ---
         if orphans_to_insert:
             total_insert = sum(1 + len(org["children"]) for org in orphans_to_insert)
+                
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
                 
@@ -279,11 +311,10 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     p_item = org["parent"]
                     titulo = p_item.get("Description", "")
                     
-                    ws.cell(row=current_insert_row, column=2, value=titulo)
-                    
                     qty_str = str(p_item.get("Quantity", "1")).strip()
                     parent_qty = int(qty_str) if qty_str.isdigit() else 1
                     
+                    ws.cell(row=current_insert_row, column=2, value=titulo)
                     if not org["is_partial"]:
                         ws.cell(row=current_insert_row, column=7, value=p_item.get("MCC", ""))
                         ws.cell(row=current_insert_row, column=8, value=p_item.get("Quantity", ""))
@@ -302,9 +333,11 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
                         ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
                         
-                        # INYECCIÓN FINAL DE PRECIOS PARA HUÉRFANOS
+                        # AQUÍ SÍ INYECTAMOS PRECIOS MATEMÁTICAMENTE PORQUE ESTAS FILAS SON NUEVAS Y NO TIENEN FÓRMULAS
                         cat_item = get_catalog_data(ai_c_desc)
-                        part_no = cat_item.get("Part", "") if cat_item else ""
+                        part_no = child.get("Part No.", "")
+                        if not part_no and cat_item: part_no = cat_item.get("Part", "")
+                        
                         base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
                         calc_labour = base_labour * parent_qty
                         
@@ -318,6 +351,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
+        # LÓGICA I/O SCHEDULE (Se mantiene impecable)
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True
@@ -402,6 +436,7 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
+                # --- FILTRO ANTI-CEROS ---
                 for item in materials_data:
                     for key, val in item.items():
                         if val == 0 or val == "0" or val == "0.0":
@@ -444,6 +479,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

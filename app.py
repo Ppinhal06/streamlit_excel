@@ -382,23 +382,13 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # === I/O SCHEDULE: BOM CONSOLIDADO (SIN REPETICIONES) CON COLUMNA DE CANTIDAD EXTRA ===
-        
-        # Limpiamos el área de trabajo
+        # === I/O SCHEDULE: BOM PURO Y LIMPIO ===
         for r in range(start_row, ws.max_row + 1):
             for c in range(2, 13):
                 cell = ws.cell(row=r, column=c)
                 if not isinstance(cell, MergedCell):
                     cell.value = None
         
-        # Renombramos el encabezado de la columna J (10) para I/O
-        cell_j6 = ws.cell(row=6, column=10)
-        if not isinstance(cell_j6, MergedCell):
-            cell_j6.value = "Piece Qty"
-            cell_j6.font = copy.copy(ws.cell(row=6, column=9).font)
-            cell_j6.alignment = copy.copy(ws.cell(row=6, column=9).alignment)
-            cell_j6.border = copy.copy(ws.cell(row=6, column=9).border)
-
         aggregated_io = {}
         ai_groups_io = []
         current_ai_parent_io = None
@@ -448,7 +438,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         v = str(val).strip()
                         return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
                         
-                    # Extraemos los puntos INDIVIDUALES por unidad
+                    # Puntos INDIVIDUALES por unidad
                     base_ai = cat_item.get("AI", 0) if cat_item else (1 if get_val(child.get("AI", 0)) > 0 else 0)
                     base_ao = cat_item.get("AO", 0) if cat_item else (1 if get_val(child.get("AO", 0)) > 0 else 0)
                     base_di = cat_item.get("DI", 0) if cat_item else (1 if get_val(child.get("DI", 0)) > 0 else 0)
@@ -488,12 +478,12 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         datos_io_procesados = []
         datos_io_procesados.append({
             "Description": "Consolidated Bill of Materials (BOM)",
-            "Part No.": "", "Quantity": "", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "", "Piece_Qty": "", "Labour": ""
+            "Part No.": "", "Piece_Qty": "", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "", "Labour": ""
         })
         
         sorted_keys = sorted(aggregated_io.keys(), key=lambda k: aggregated_io[k]["Description"])
         
-        # INYECCIÓN FINAL DE BOM: Puntos individuales en I/O, Cantidad física agregada en Columna 10
+        # INYECCIÓN FINAL DE BOM
         for k in sorted_keys:
             data = aggregated_io[k]
             tot_qty = data["Quantity"]
@@ -503,7 +493,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             datos_io_procesados.append({
                 "Description": data["Description"],
                 "Part No.": data["Part No."],
-                "Quantity": "", # Mantenemos la original 8 vacía como acordamos en BOM
                 "AI": data["AI"] if data["AI"] > 0 else "",
                 "AO": data["AO"] if data["AO"] > 0 else "",
                 "DI": data["DI"] if data["DI"] > 0 else "",
@@ -519,14 +508,14 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             part = str(row_data.get("Part No.", "")).strip()
             es_header = bool(desc) and not bool(part) and not tiene_puntos(row_data)
 
+            # MAPEO CORRECTO: Usamos la columna 8 nativa para la Cantidad Total
             col_map = {
                 2: row_data.get("Description", ""), 
                 3: row_data.get("AI", ""), 4: row_data.get("AO", ""),
                 5: row_data.get("DI", ""), 6: row_data.get("DO", ""), 
                 7: row_data.get("MCC", ""),
-                8: row_data.get("Quantity", ""), 
+                8: row_data.get("Piece_Qty", ""), # <- EL TOTAL DE CANTIDAD A LA COLUMNA AZUL (8)
                 9: row_data.get("Part No.", ""),
-                10: row_data.get("Piece_Qty", ""),
                 12: row_data.get("Labour", "")
             }
             
@@ -640,4 +629,4 @@ if st.session_state.generado:
     with col_btn1:
         st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

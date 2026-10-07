@@ -9,6 +9,7 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.worksheet.cell_range import CellRange
+from openpyxl.cell.cell import MergedCell
 
 st.set_page_config(page_title="BEMS Estimator Pro - DC Controls", layout="wide")
 st.title("Automated BEMS Points List & Estimator")
@@ -162,7 +163,8 @@ def actualizar_formulas(ws, green_idx, total_insert):
     for r in range(1, ws.max_row + 1):
         for c in range(1, 15):
             cell = ws.cell(row=r, column=c)
-            if isinstance(cell.value, str) and cell.value.startswith("="):
+            # Candado contra MergedCells en la actualización
+            if not isinstance(cell, MergedCell) and isinstance(cell.value, str) and cell.value.startswith("="):
                 new_formula = re.sub(r'([A-Z]{1,2})([0-9]+)', replacer, cell.value)
                 if cell.value != new_formula:
                     cell.value = new_formula
@@ -186,14 +188,21 @@ def reparar_celdas_combinadas(ws, green_idx, total_insert):
 def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
     for c in range(1, 15):
         try:
-            fuente = copy.copy(ws.cell(row=source_row, column=c).font)
+            source_cell = ws.cell(row=source_row, column=c)
+            target_cell = ws.cell(row=target_row, column=c)
+            
+            # Candado estético
+            if isinstance(target_cell, MergedCell) or isinstance(source_cell, MergedCell):
+                continue
+                
+            fuente = copy.copy(source_cell.font)
             if c == 2: fuente.bold = es_padre
             
-            ws.cell(row=target_row, column=c).font = fuente
-            ws.cell(row=target_row, column=c).border = copy.copy(ws.cell(row=source_row, column=c).border)
-            ws.cell(row=target_row, column=c).alignment = copy.copy(ws.cell(row=source_row, column=c).alignment)
-            ws.cell(row=target_row, column=c).fill = copy.copy(ws.cell(row=source_row, column=c).fill)
-            ws.cell(row=target_row, column=c).number_format = ws.cell(row=source_row, column=c).number_format
+            target_cell.font = fuente
+            target_cell.border = copy.copy(source_cell.border)
+            target_cell.alignment = copy.copy(source_cell.alignment)
+            target_cell.fill = copy.copy(source_cell.fill)
+            target_cell.number_format = source_cell.number_format
         except AttributeError:
             pass
 
@@ -233,7 +242,9 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8]:
-                ws.cell(row=r, column=c).value = None 
+                cell = ws.cell(row=r, column=c)
+                if not isinstance(cell, MergedCell):
+                    cell.value = None 
 
         ai_groups = []
         current_ai_parent = None
@@ -272,15 +283,22 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             
             tpl_name = str(ws.cell(row=best_match_row, column=2).value or "")
             if "XXXX" in tpl_name or "??" in tpl_name:
-                ws.cell(row=best_match_row, column=2).value = ai_p_desc
+                cell_name = ws.cell(row=best_match_row, column=2)
+                if not isinstance(cell_name, MergedCell):
+                    cell_name.value = ai_p_desc
             
-            ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
-            ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
+            cell_mcc = ws.cell(row=best_match_row, column=7)
+            if not isinstance(cell_mcc, MergedCell): cell_mcc.value = p_item.get("MCC", "")
+            
+            cell_qty = ws.cell(row=best_match_row, column=8)
+            if not isinstance(cell_qty, MergedCell): cell_qty.value = p_item.get("Quantity", "")
             
             if "chiller" in tpl_name.lower():
                 next_desc = str(ws.cell(row=best_match_row + 1, column=2).value or "").strip()
                 if "chiller mains" in next_desc.lower():
-                    ws.cell(row=best_match_row + 1, column=8).value = p_item.get("Quantity", "")
+                    cm_qty = ws.cell(row=best_match_row + 1, column=8)
+                    if not isinstance(cm_qty, MergedCell):
+                        cm_qty.value = p_item.get("Quantity", "")
             
             missing_children = []
             for child in group["children"]:
@@ -292,10 +310,15 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     if c_desc:
                         if fuzzy_match_strict(ai_c_desc, c_desc):
                             if not ws.cell(row=cr, column=3).value and not ws.cell(row=cr, column=6).value:
-                                if child.get("AI"): ws.cell(row=cr, column=3).value = child.get("AI")
-                                if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
-                                if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
-                                if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
+                                c_ai = ws.cell(row=cr, column=3)
+                                c_ao = ws.cell(row=cr, column=4)
+                                c_di = ws.cell(row=cr, column=5)
+                                c_do = ws.cell(row=cr, column=6)
+                                
+                                if not isinstance(c_ai, MergedCell): c_ai.value = child.get("AI")
+                                if not isinstance(c_ao, MergedCell): c_ao.value = child.get("AO")
+                                if not isinstance(c_di, MergedCell): c_di.value = child.get("DI")
+                                if not isinstance(c_do, MergedCell): c_do.value = child.get("DO")
                                 child_matched = True
                                 break 
                                 
@@ -325,21 +348,31 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     qty_str = str(p_item.get("Quantity", "1")).strip()
                     parent_qty = int(qty_str) if qty_str.isdigit() else 1
                     
-                    ws.cell(row=current_insert_row, column=2, value=titulo)
+                    cell_title = ws.cell(row=current_insert_row, column=2)
+                    if not isinstance(cell_title, MergedCell): cell_title.value = titulo
+                    
                     if not org["is_partial"]:
-                        ws.cell(row=current_insert_row, column=7, value=p_item.get("MCC", ""))
-                        ws.cell(row=current_insert_row, column=8, value=p_item.get("Quantity", ""))
+                        c_mcc = ws.cell(row=current_insert_row, column=7)
+                        c_qty = ws.cell(row=current_insert_row, column=8)
+                        if not isinstance(c_mcc, MergedCell): c_mcc.value = p_item.get("MCC", "")
+                        if not isinstance(c_qty, MergedCell): c_qty.value = p_item.get("Quantity", "")
                         
                     clonar_estilo_columna(ws, green_row_idx - 1, current_insert_row, es_padre=True)
                     current_insert_row += 1
                     
                     for child in org["children"]:
                         ai_c_desc = child.get("Description", "")
-                        ws.cell(row=current_insert_row, column=2, value=ai_c_desc)
-                        ws.cell(row=current_insert_row, column=3, value=child.get("AI", ""))
-                        ws.cell(row=current_insert_row, column=4, value=child.get("AO", ""))
-                        ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
-                        ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
+                        c_desc = ws.cell(row=current_insert_row, column=2)
+                        c_ai = ws.cell(row=current_insert_row, column=3)
+                        c_ao = ws.cell(row=current_insert_row, column=4)
+                        c_di = ws.cell(row=current_insert_row, column=5)
+                        c_do = ws.cell(row=current_insert_row, column=6)
+                        
+                        if not isinstance(c_desc, MergedCell): c_desc.value = ai_c_desc
+                        if not isinstance(c_ai, MergedCell): c_ai.value = child.get("AI", "")
+                        if not isinstance(c_ao, MergedCell): c_ao.value = child.get("AO", "")
+                        if not isinstance(c_di, MergedCell): c_di.value = child.get("DI", "")
+                        if not isinstance(c_do, MergedCell): c_do.value = child.get("DO", "")
                         
                         cat_item = get_catalog_data(ai_c_desc)
                         part_no = child.get("Part No.", "")
@@ -348,17 +381,21 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
                         calc_labour = base_labour * parent_qty
                         
-                        if part_no: ws.cell(row=current_insert_row, column=9).value = part_no
-                        if calc_labour > 0: ws.cell(row=current_insert_row, column=12).value = calc_labour
+                        c_part = ws.cell(row=current_insert_row, column=9)
+                        c_labour = ws.cell(row=current_insert_row, column=12)
+                        if not isinstance(c_part, MergedCell) and part_no: c_part.value = part_no
+                        if not isinstance(c_labour, MergedCell) and calc_labour > 0: c_labour.value = calc_labour
                         
                         clonar_estilo_columna(ws, green_row_idx - 1, current_insert_row, es_padre=False)
                         current_insert_row += 1
 
     else:
-        # === I/O SCHEDULE: CONSOLIDACIÓN Y DESGLOSE POR EQUIPO ===
+        # Candado para que la limpieza del I/O Schedule no borre las celdas combinadas de abajo
         for r in range(start_row, ws.max_row + 1):
             for c in [2, 3, 4, 5, 6, 7, 8, 9]:
-                ws.cell(row=r, column=c).value = None
+                cell = ws.cell(row=r, column=c)
+                if not isinstance(cell, MergedCell):
+                    cell.value = None
         
         aggregated_io = {}
         ai_groups_io = []
@@ -375,7 +412,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
 
         for group in ai_groups_io:
             p_item = group["parent"]
-            # Extraemos un nombre corto del equipo para que se lea limpio
             p_name = p_item.get("Description", "System").split("(")[0].strip()
             
             qty_str = str(p_item.get("Quantity", "1")).strip()
@@ -410,7 +446,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         "Part No.": part_no,
                         "Quantity": 0,
                         "AI": 0, "AO": 0, "DI": 0, "DO": 0,
-                        "Breakdown": {} # Aquí guardaremos a qué equipo pertenece
+                        "Breakdown": {} 
                     }
                     
                 def get_val(val):
@@ -433,7 +469,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     
                 aggregated_io[agg_key]["Quantity"] += line_qty
                 
-                # Desglose matemático por equipo
                 if p_name not in aggregated_io[agg_key]["Breakdown"]:
                     aggregated_io[agg_key]["Breakdown"][p_name] = 0
                 aggregated_io[agg_key]["Breakdown"][p_name] += line_qty
@@ -448,7 +483,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         
         for k in sorted_keys:
             data = aggregated_io[k]
-            # Formateador del desglose para la columna Descripción
             breakdown_str = " + ".join([f"{sys}: {q}" for sys, q in data["Breakdown"].items()])
             final_desc = f"{data['Description']}  [{breakdown_str}]"
             
@@ -472,10 +506,12 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             col_map = {
                 2: row_data.get("Description", ""), 3: row_data.get("AI", ""), 4: row_data.get("AO", ""),
                 5: row_data.get("DI", ""), 6: row_data.get("DO", ""), 7: row_data.get("MCC", ""),
-                8: row_data.get("Quantity", ""), 9: row_data.get("Part No.", "")
+                8: row_data.get("Quantity", ""), 9: row_data.get("Part No.")
             }
             for col_num, val in col_map.items():
-                ws.cell(row=current_row, column=col_num, value=val)
+                cell = ws.cell(row=current_row, column=col_num)
+                if not isinstance(cell, MergedCell):
+                    cell.value = val
             
             clonar_estilo_columna(ws, start_row, current_row, es_padre=es_header)
 
@@ -576,6 +612,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
         st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

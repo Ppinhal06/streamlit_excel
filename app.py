@@ -196,6 +196,10 @@ def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
             fuente = copy.copy(source_cell.font)
             if c == 2: fuente.bold = es_padre
             
+            # PARCHE: Forzamos el color negro en la columna Quantity para vencer la fuente blanca nativa
+            if c == 8:
+                fuente.color = copy.copy(ws.cell(row=source_row, column=9).font.color)
+            
             target_cell.font = fuente
             target_cell.border = copy.copy(source_cell.border)
             target_cell.alignment = copy.copy(source_cell.alignment)
@@ -221,7 +225,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
 
     if not es_io_schedule:
-        # === QUOTATION INTACTO ===
         req_row = ws.max_row
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
@@ -382,7 +385,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # === I/O SCHEDULE: BOM PURO Y LIMPIO ===
         for r in range(start_row, ws.max_row + 1):
             for c in range(2, 13):
                 cell = ws.cell(row=r, column=c)
@@ -416,7 +418,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if not part_no and cat_item:
                     part_no = cat_item.get("Part", "")
                 
-                # AGRUPADOR: Toda pieza con el mismo número de parte colisiona en una sola línea
                 agg_key = part_no.strip().lower() if part_no.strip() else desc.strip().lower()
                 if not agg_key:
                     continue
@@ -438,7 +439,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         v = str(val).strip()
                         return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
                         
-                    # Puntos INDIVIDUALES por unidad
                     base_ai = cat_item.get("AI", 0) if cat_item else (1 if get_val(child.get("AI", 0)) > 0 else 0)
                     base_ao = cat_item.get("AO", 0) if cat_item else (1 if get_val(child.get("AO", 0)) > 0 else 0)
                     base_di = cat_item.get("DI", 0) if cat_item else (1 if get_val(child.get("DI", 0)) > 0 else 0)
@@ -483,7 +483,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         
         sorted_keys = sorted(aggregated_io.keys(), key=lambda k: aggregated_io[k]["Description"])
         
-        # INYECCIÓN FINAL DE BOM
         for k in sorted_keys:
             data = aggregated_io[k]
             tot_qty = data["Quantity"]
@@ -508,13 +507,12 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             part = str(row_data.get("Part No.", "")).strip()
             es_header = bool(desc) and not bool(part) and not tiene_puntos(row_data)
 
-            # MAPEO CORRECTO: Usamos la columna 8 nativa para la Cantidad Total
             col_map = {
                 2: row_data.get("Description", ""), 
                 3: row_data.get("AI", ""), 4: row_data.get("AO", ""),
                 5: row_data.get("DI", ""), 6: row_data.get("DO", ""), 
                 7: row_data.get("MCC", ""),
-                8: row_data.get("Piece_Qty", ""), # <- EL TOTAL DE CANTIDAD A LA COLUMNA AZUL (8)
+                8: row_data.get("Piece_Qty", ""),
                 9: row_data.get("Part No.", ""),
                 12: row_data.get("Labour", "")
             }
@@ -529,7 +527,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             
             clonar_estilo_columna(ws, start_row, current_row, es_padre=es_header)
 
-        # Borrado de celdas sobrantes
         last_row = start_row + len(datos_io_procesados) - 1
         delete_start = last_row + 1
         ws.print_area = ""
@@ -627,6 +624,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
         st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

@@ -23,7 +23,7 @@ with st.sidebar:
     st.header("System Configuration")
     api_key = st.text_input("Enter API Key (Gemini):", type="password")
     st.markdown("---")
-    st.info("✅ Standard DC Controls template is pre-loaded from the cloud server.")
+    st.info("Standard DC Controls template is pre-loaded from the cloud server.")
 
 if api_key:
     genai.configure(api_key=api_key)

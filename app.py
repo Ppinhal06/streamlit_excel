@@ -221,7 +221,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
 
     if not es_io_schedule:
-        # === MANTENEMOS EL QUOTATION INTACTO Y PERFECTO ===
+        # === QUOTATION INTACTO ===
         req_row = ws.max_row
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
@@ -360,17 +360,11 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     
                     for child in org["children"]:
                         ai_c_desc = child.get("Description", "")
-                        c_desc = ws.cell(row=current_insert_row, column=2)
-                        c_ai = ws.cell(row=current_insert_row, column=3)
-                        c_ao = ws.cell(row=current_insert_row, column=4)
-                        c_di = ws.cell(row=current_insert_row, column=5)
-                        c_do = ws.cell(row=current_insert_row, column=6)
-                        
-                        if not isinstance(c_desc, MergedCell): c_desc.value = ai_c_desc
-                        if not isinstance(c_ai, MergedCell): c_ai.value = child.get("AI", "")
-                        if not isinstance(c_ao, MergedCell): c_ao.value = child.get("AO", "")
-                        if not isinstance(c_di, MergedCell): c_di.value = child.get("DI", "")
-                        if not isinstance(c_do, MergedCell): c_do.value = child.get("DO", "")
+                        ws.cell(row=current_insert_row, column=2, value=ai_c_desc)
+                        ws.cell(row=current_insert_row, column=3, value=child.get("AI", ""))
+                        ws.cell(row=current_insert_row, column=4, value=child.get("AO", ""))
+                        ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
+                        ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
                         
                         cat_item = get_catalog_data(ai_c_desc)
                         part_no = child.get("Part No.", "")
@@ -388,7 +382,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # === NUEVA DINÁMICA PERFECTA I/O SCHEDULE (BOM) ===
+        # === I/O SCHEDULE: BOM PURO Y LIMPIO ===
         for r in range(start_row, ws.max_row + 1):
             for c in [2, 3, 4, 5, 6, 7, 8, 9]:
                 cell = ws.cell(row=r, column=c)
@@ -440,7 +434,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                     clean_desc = k.replace("Boiler ", "").replace("Chiller ", "").replace("Header ", "").replace("Pump ", "")
                                     break
                     
-                    # Obtenemos los puntos base para 1 sola pieza desde el catálogo o inferidos
+                    # Obtenemos SIEMPRE los puntos base de 1 sola pieza desde nuestro catálogo interno
                     def get_val(val):
                         v = str(val).strip()
                         return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
@@ -455,9 +449,8 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         "Part No.": part_no,
                         "Quantity": 0,
                         "AI": base_ai, "AO": base_ao, "DI": base_di, "DO": base_do,
-                        "Breakdown": {} 
                     }
-                    
+                
                 def get_val(val):
                     v = str(val).strip()
                     return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
@@ -467,7 +460,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 di_total = get_val(child.get("DI", 0))
                 do_total = get_val(child.get("DO", 0))
                 
-                # Calculamos piezas reales dividiendo el total de la IA entre el valor base
                 b_ai = aggregated_io[agg_key]["AI"]
                 b_ao = aggregated_io[agg_key]["AO"]
                 b_di = aggregated_io[agg_key]["DI"]
@@ -482,10 +474,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if pieces == 0: pieces = p_qty
                     
                 aggregated_io[agg_key]["Quantity"] += pieces
-                
-                if p_name not in aggregated_io[agg_key]["Breakdown"]:
-                    aggregated_io[agg_key]["Breakdown"][p_name] = 0
-                aggregated_io[agg_key]["Breakdown"][p_name] += pieces
 
         datos_io_procesados = []
         datos_io_procesados.append({
@@ -497,22 +485,16 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         
         for k in sorted_keys:
             data = aggregated_io[k]
-            # EL GRAN SECRETO: Inyectamos el desglose en el recuadro verde (AI, AO, DI, DO) y la cantidad en el recuadro azul
-            breakdown_str = " + ".join([f"{sys}: {q}" for sys, q in data["Breakdown"].items()])
             
-            final_ai = breakdown_str if data["AI"] > 0 else ""
-            final_ao = breakdown_str if data["AO"] > 0 else ""
-            final_di = breakdown_str if data["DI"] > 0 else ""
-            final_do = breakdown_str if data["DO"] > 0 else ""
-            
+            # EL GRAN FIX: Colocamos el PUNTUACIÓN INDIVIDUAL en los cuadritos verdes y la CANTIDAD TOTAL en la línea azul.
             datos_io_procesados.append({
                 "Description": data["Description"],
                 "Part No.": data["Part No."],
                 "Quantity": data["Quantity"] if data["Quantity"] > 0 else "",
-                "AI": final_ai,
-                "AO": final_ao,
-                "DI": final_di,
-                "DO": final_do,
+                "AI": data["AI"] if data["AI"] > 0 else "",
+                "AO": data["AO"] if data["AO"] > 0 else "",
+                "DI": data["DI"] if data["DI"] > 0 else "",
+                "DO": data["DO"] if data["DO"] > 0 else "",
                 "MCC": ""
             })
 
@@ -631,6 +613,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
         st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

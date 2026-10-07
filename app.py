@@ -27,10 +27,9 @@ with st.sidebar:
 
 if api_key:
     genai.configure(api_key=api_key)
-    # Ajustado al modelo que usas en producción
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# 2. Base de Conocimiento
+# 2. Base de Conocimiento Expandida
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {
         "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
@@ -114,7 +113,42 @@ component_catalog = {
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- COMPARADOR ESTRICTO ---
+def tiene_puntos(row):
+    for io_type in ["AI", "AO", "DI", "DO"]:
+        val = str(row.get(io_type, "")).strip()
+        if val and val.replace('.', '', 1).isdigit() and float(val) > 0:
+            return True
+    return False
+
+# --- ESCÁNER 1: RELAJADO (PARA ENCABEZADOS Y PADRES) ---
+def fuzzy_match_parent(ai_str, tpl_str):
+    ai_orig = str(ai_str).strip().lower().replace("temp ", "temperature ")
+    tpl_orig = str(tpl_str).strip().lower().replace("temp ", "temperature ")
+    
+    # Quita las 's' plurales para que "Chillers" empate con "Chiller"
+    ai_words = set([w[:-1] if w.endswith('s') and len(w)>3 else w for w in re.findall(r'[a-z0-9]+', ai_orig)])
+    tpl_words = set([w[:-1] if w.endswith('s') and len(w)>3 else w for w in re.findall(r'[a-z0-9]+', tpl_orig)])
+    
+    if not ai_words or not tpl_words: return False
+
+    if ai_orig == tpl_orig: return True
+    if ai_words == tpl_words: return True
+    if ai_words.issubset(tpl_words) or tpl_words.issubset(ai_words): return True
+    
+    # Acrónimos comunes en BEMS
+    if "ahu" in ai_words and "air" in tpl_words and "handling" in tpl_words: return True
+    if "ahu" in tpl_words and "air" in ai_words and "handling" in ai_words: return True
+    if "fcu" in ai_words and "fan" in tpl_words and "coil" in tpl_words: return True
+    if "fcu" in tpl_words and "fan" in ai_words and "coil" in ai_words: return True
+    if "chiller" in ai_words and "chiller" in tpl_words: return True
+    if "pump" in ai_words and "pump" in tpl_words: return True
+    if "tank" in ai_words and "tank" in tpl_words: return True
+    
+    if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.70:
+        return True
+    return False
+
+# --- ESCÁNER 2: ESTRICTO (PARA COMPONENTES E HIJOS) ---
 def fuzzy_match_strict(ai_str, tpl_str):
     ai_orig = str(ai_str).strip().lower().replace("temp ", "temperature ")
     tpl_orig = str(tpl_str).strip().lower().replace("temp ", "temperature ")
@@ -138,13 +172,6 @@ def fuzzy_match_strict(ai_str, tpl_str):
         
     return False
 
-def tiene_puntos(row):
-    for io_type in ["AI", "AO", "DI", "DO"]:
-        val = str(row.get(io_type, "")).strip()
-        if val and val.replace('.', '', 1).isdigit() and float(val) > 0:
-            return True
-    return False
-
 # --- FUNCIÓN MAESTRA ---
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
@@ -163,9 +190,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
 
     if not es_io_schedule:
-        # ==========================================
-        # COTIZACIÓN OFICIAL: Mapeo y Rescate de Huérfanos
-        # ==========================================
         req_row = ws.max_row
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
@@ -173,7 +197,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 req_row = r
                 break
                 
-        # Limpiar los 1s fantasmas de fábrica
+        # 1. Limpiar todos los números base del template original
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
                 ws.cell(row=r, column=c).value = None 
@@ -198,19 +222,18 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             ai_p_desc = p_item.get("Description", "")
             
             best_match_row = None
-            # Buscar el equipo principal
+            # USAR ESCÁNER RELAJADO PARA PADRES
             for r in range(start_row, req_row):
                 desc_cell = ws.cell(row=r, column=2).value
                 part_cell = ws.cell(row=r, column=9).value
                 
                 if desc_cell and not part_cell:
-                    if fuzzy_match_strict(ai_p_desc, desc_cell):
+                    if fuzzy_match_parent(ai_p_desc, desc_cell):
                         if not ws.cell(row=r, column=8).value:
                             best_match_row = r
                             break
                             
             if best_match_row:
-                # Mapear Padre
                 ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
                 ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
                 
@@ -219,13 +242,13 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     ai_c_desc = child.get("Description", "")
                     child_matched = False
                     
-                    # Buscar componentes dentro de este bloque
+                    # USAR ESCÁNER ESTRICTO PARA HIJOS
                     for cr in range(best_match_row + 1, req_row):
                         c_desc = ws.cell(row=cr, column=2).value
                         c_part = ws.cell(row=cr, column=9).value
                         
                         if c_desc and not c_part:
-                            break # Termina el bloque de este equipo
+                            break 
                             
                         if c_desc:
                             if fuzzy_match_strict(ai_c_desc, c_desc):
@@ -242,24 +265,21 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         missing_children.append(child)
                         
                 if missing_children:
-                    # Encontró el equipo pero le faltaron piezas (Raro, pero seguro)
                     orphans_to_insert.append({"parent": p_item, "children": missing_children, "is_partial": True})
             else:
-                # El equipo entero NO EXISTE en la plantilla (Ej. Los famosos FCUs)
+                # El equipo entero NO EXISTE en la plantilla original y se creará desde cero
                 orphans_to_insert.append({"parent": p_item, "children": group["children"], "is_partial": False})
 
-        # --- MOTOR DE CREACIÓN DE FILAS (El Rescate) ---
+        # --- RESCATE DE HUÉRFANOS ---
         if orphans_to_insert:
             total_insert = 0
             for org in orphans_to_insert:
-                total_insert += 1 # El encabezado siempre va
+                total_insert += 1 
                 total_insert += len(org["children"])
                 
             if total_insert > 0:
-                # Insertamos las filas limpiamente justo antes de los totales
                 ws.insert_rows(req_row, total_insert)
                 
-                # Extraemos el diseño corporativo
                 fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
                 fuente_header = copy.copy(fuente_base)
                 fuente_header.bold = True
@@ -271,8 +291,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 current_insert_row = req_row
                 for org in orphans_to_insert:
                     p_item = org["parent"]
-                    
-                    # Escribimos el Encabezado Padre
                     titulo = p_item.get("Description", "")
                     if org["is_partial"]: titulo += " (Additional Components)"
                     
@@ -287,13 +305,13 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         ws.cell(row=current_insert_row, column=c).alignment = alineacion_base
                     current_insert_row += 1
                     
-                    # Escribimos los Hijos
                     for child in org["children"]:
                         ws.cell(row=current_insert_row, column=2, value=child.get("Description", ""))
                         ws.cell(row=current_insert_row, column=3, value=child.get("AI", ""))
                         ws.cell(row=current_insert_row, column=4, value=child.get("AO", ""))
                         ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
                         ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
+                        # Si es huérfano, le metemos el part number crudo que sacó la IA
                         ws.cell(row=current_insert_row, column=9, value=child.get("Part No.", ""))
                         ws.cell(row=current_insert_row, column=12, value=child.get("Labour At 20%", ""))
                         
@@ -304,9 +322,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # ==========================================
-        # I/O SCHEDULE (Clásico y Limpio)
-        # ==========================================
+        # I/O SCHEDULE (Filtra todo dejando el reporte inmaculado)
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True
@@ -357,7 +373,7 @@ with col1:
 with col2:
     project_description = st.text_area(
         "Project Scope Description:", 
-        placeholder="Example: We need a plant with 2 Boilers, 60 FCUs, and 1 Chiller."
+        placeholder="Example: We need a plant with 2 Boilers, 3 Primary Pumps, 1 Storage Tank, and Metering."
     )
 
 st.markdown("---")
@@ -366,7 +382,7 @@ if st.button("Generate Points List"):
     if not api_key or not project_description:
         st.warning("Please ensure you have entered your API Key and provided a project description.")
     else:
-        with st.spinner("Engineering system points and strictly mapping to template (appending missing items)..."):
+        with st.spinner("Engineering system points and intelligently routing to template..."):
             prompt = f"""
             You are an expert BEMS estimator working for DC Controls. Generate a Points List based on the description.
             
@@ -377,13 +393,13 @@ if st.button("Generate Points List"):
             {json.dumps(component_catalog, indent=2)}
             
             CRITICAL FORMATTING INSTRUCTIONS:
-            1. Create a HEADER ROW for each main equipment group.
-            2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES. DO NOT MAKE UP DESCRIPTIONS.
+            1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description" (e.g. "AHU (Air Handling Unit)", NOT "Air Handling Units"). DO NOT INVENT NAMES.
+            2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES.
             3. CRITICAL RULE: For components (child rows), "Quantity" and "MCC" MUST be left completely blank ("").
             4. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI).
             5. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
             6. Use the exact Part No. from the catalog.
-            7. Leave IOs or Labour as completely empty strings ("") if the value is 0.
+            7. Leave IOs or Labour as completely empty strings ("") if the value is 0. Do NOT output a 0.
             
             User description: "{project_description}"
             
@@ -394,12 +410,11 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- FILTRO ANTI-CEROS DE SEGURIDAD ---
+                # --- FILTRO ANTI-CEROS DE SEGURIDAD EXTREMA ---
                 for item in materials_data:
                     for key, val in item.items():
                         if val == 0 or val == "0" or val == "0.0":
                             item[key] = ""
-                # ----------------------------------------------
                 
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 

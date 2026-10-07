@@ -152,12 +152,10 @@ def actualizar_formulas(ws, green_idx, total_insert):
     def replacer(match):
         col = match.group(1)
         row_num = int(match.group(2))
-        
         if row_num >= green_idx:
             return f"{col}{row_num + total_insert}"
         if row_num == green_idx - 1:
             return f"{col}{row_num + total_insert}"
-            
         return match.group(0)
 
     for r in range(1, ws.max_row + 1):
@@ -184,6 +182,7 @@ def reparar_celdas_combinadas(ws, green_idx, total_insert):
     for mcr in new_merged:
         ws.merged_cells.add(mcr)
 
+# CLONADOR CON PARCHE MAESTRO PARA LETRAS ENANAS
 def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
     for c in range(1, 15):
         try:
@@ -192,13 +191,14 @@ def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
             
             if isinstance(target_cell, MergedCell) or isinstance(source_cell, MergedCell):
                 continue
-                
-            fuente = copy.copy(source_cell.font)
-            if c == 2: fuente.bold = es_padre
             
-            # PARCHE: Forzamos el color negro en la columna Quantity para vencer la fuente blanca nativa
+            # EL PARCHE: Si es la columna 8 (Quantity), clonamos la fuente de la columna 9 para evadir la letra "Small" nativa de Excel
             if c == 8:
-                fuente.color = copy.copy(ws.cell(row=source_row, column=9).font.color)
+                fuente = copy.copy(ws.cell(row=source_row, column=9).font)
+            else:
+                fuente = copy.copy(source_cell.font)
+                
+            if c == 2: fuente.bold = es_padre
             
             target_cell.font = fuente
             target_cell.border = copy.copy(source_cell.border)
@@ -385,6 +385,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
+        # === I/O SCHEDULE: BOM ===
         for r in range(start_row, ws.max_row + 1):
             for c in range(2, 13):
                 cell = ws.cell(row=r, column=c)

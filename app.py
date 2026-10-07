@@ -9,12 +9,9 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 
-# 1. UI Configuration & API
 st.set_page_config(page_title="BEMS Estimator Pro - DC Controls", layout="wide")
-
 st.title("Automated BEMS Points List & Estimator")
 st.markdown("---")
-st.markdown("Professional generator with dynamic Excel template injection.")
 
 if "generado" not in st.session_state:
     st.session_state.generado = False
@@ -23,94 +20,70 @@ with st.sidebar:
     st.header("System Configuration")
     api_key = st.text_input("Enter API Key (Gemini):", type="password")
     st.markdown("---")
-    st.info("✅ Standard DC Controls template is pre-loaded from the cloud server.")
 
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# 2. Base de Conocimiento
 engineering_rules = {
-    "Common LPHW/CHW Devices (System Level)": {
-        "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
-    },
-    "Boiler": {
-        "per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]
-    },
-    "Pump (Primary/Secondary)": {
-        "per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]
-    },
-    "Pressurisation Unit": {
-        "per_unit": ["Pressurisation Unit High Pressure", "Pressurisation Unit Low Pressure"]
-    },
-    "Calorifier / Hot Water Generator": {
-        "per_unit": ["Enable", "Common Fault", "Control Signal", "Immersion Temperature Sensor", "High Limit Thermostat (60-95 Man. Reset)"]
-    },
-    "AHU (Air Handling Unit)": {
-        "per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temp Sensor", "Return Air Temp Sensor", "Frost Stat"]
-    },
-    "FCU (Fan Coil Unit)": {
-        "per_unit": ["Space Temperature Sensor", "Control Valve Actuator"]
-    },
-    "Storage Tank (Cold Water / Mains)": {
-        "per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]
-    },
-    "Chiller": {
-        "per_unit": ["Chiller Enable and Status", "Chiller Flow Switch", "Chiller Flow Immersion Temperature Sensor", "Chiller Return Immersion Temperature Sensor"]
-    },
-    "Extract Fan": {
-        "per_unit": ["Enable and Current Switch"]
-    },
-    "Metering": {
-        "mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]
-    }
+    "Common LPHW/CHW Devices (System Level)": {"mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
+    "Boiler": {"per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]},
+    "Pump (Primary/Secondary)": {"per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]},
+    "Pressurisation Unit": {"per_unit": ["Pressurisation Unit High Pressure", "Pressurisation Unit Low Pressure"]},
+    "Calorifier / Hot Water Generator": {"per_unit": ["Enable", "Common Fault", "Control Signal", "Immersion Temperature Sensor", "High Limit Thermostat (60-95 Man. Reset)"]},
+    "AHU (Air Handling Unit)": {"per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temp Sensor", "Return Air Temp Sensor", "Frost Stat"]},
+    "FCU (Fan Coil Unit)": {"per_unit": ["Space Temperature Sensor", "Control Valve Actuator"]},
+    "Storage Tank (Cold Water / Mains)": {"per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]},
+    "Chiller": {"per_unit": ["Chiller Enable and Status", "Chiller Flow Switch", "Chiller Flow Immersion Temperature Sensor", "Chiller Return Immersion Temperature Sensor"]},
+    "Extract Fan": {"per_unit": ["Enable and Current Switch"]},
+    "Metering": {"mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]}
 }
 
 component_catalog = {
-    "Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Outside Frost Thermostat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Outside Temperature Sensor": {"Part": "TB/TO", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Immersion Frost Thermostat": {"Part": "DBTV-2U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Boiler Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Boiler Common Fault": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Boiler Control Signal": {"Part": "0…10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
-    "Boiler Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Boiler Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Pump Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Pump Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Variable Speed Drive": {"Part": "Built in to Pump", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
-    "Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "3 Port Control Valve / Actuator": {"Part": "Valve 40mm", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
-    "Pressurisation Unit High Pressure": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Pressurisation Unit Low Pressure": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Common Fault": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Control Signal": {"Part": "0…10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
-    "Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "High Limit Thermostat (60-95 Man. Reset)": {"Part": "RAK TW 1000B", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Space Temperature Sensor": {"Part": "RS-Temp", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Control Valve Actuator": {"Part": "MVC / DB_VZ", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
-    "Supply Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Return Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Tank Low Low Level Status": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Tank Section 1 Low Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Tank Section 1 High Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Tank Section 2 Low Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Tank Section 2 High Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Tank Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Solenoid Valve 40mm": {"Part": "Solenoid Valve 40mm / ZS50", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Ultrasonic Level Transmitter": {"Part": "LS-MC", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Enable and Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Enable and Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Gas Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Water Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
+    "Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
+    "Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
+    "Outside Frost Thermostat": {"Part": "DBET-23U", "Labour": 50},
+    "Outside Temperature Sensor": {"Part": "TB/TO", "Labour": 50},
+    "Immersion Frost Thermostat": {"Part": "DBTV-2U", "Labour": 50},
+    "Boiler Enable": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Boiler Common Fault": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Boiler Control Signal": {"Part": "0…10V dc", "Labour": 50},
+    "Boiler Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
+    "Boiler Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
+    "Pump Enable": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Pump Status": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Variable Speed Drive": {"Part": "Built in to Pump", "Labour": 50},
+    "Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
+    "3 Port Control Valve / Actuator": {"Part": "Valve 40mm", "Labour": 50},
+    "Pressurisation Unit High Pressure": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Pressurisation Unit Low Pressure": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Enable": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Common Fault": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Status": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Control Signal": {"Part": "0…10V dc", "Labour": 50},
+    "Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "Labour": 50},
+    "High Limit Thermostat (60-95 Man. Reset)": {"Part": "RAK TW 1000B", "Labour": 50},
+    "Space Temperature Sensor": {"Part": "RS-Temp", "Labour": 50},
+    "Control Valve Actuator": {"Part": "MVC / DB_VZ", "Labour": 50},
+    "Supply Air Temp Sensor": {"Part": "Duct Temp Sensor", "Labour": 50},
+    "Return Air Temp Sensor": {"Part": "Duct Temp Sensor", "Labour": 50},
+    "Frost Stat": {"Part": "DBET-23U", "Labour": 50},
+    "Tank Low Low Level Status": {"Part": "LL13 (3M Cable)", "Labour": 50},
+    "Tank Section 1 Low Level": {"Part": "LL13 (3M Cable)", "Labour": 50},
+    "Tank Section 1 High Level": {"Part": "LL13 (3M Cable)", "Labour": 50},
+    "Tank Section 2 Low Level": {"Part": "LL13 (3M Cable)", "Labour": 50},
+    "Tank Section 2 High Level": {"Part": "LL13 (3M Cable)", "Labour": 50},
+    "Tank Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "Labour": 50},
+    "Solenoid Valve 40mm": {"Part": "Solenoid Valve 40mm / ZS50", "Labour": 50},
+    "Ultrasonic Level Transmitter": {"Part": "LS-MC", "Labour": 50},
+    "Chiller Enable and Status": {"Part": "Volt Free Contacts", "Labour": 50},
+    "Chiller Flow Switch": {"Part": "FS 541", "Labour": 50},
+    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
+    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "Labour": 50},
+    "Enable and Current Switch": {"Part": "RIBXKTF", "Labour": 50},
+    "Gas Meter Pulsed Input": {"Part": "Device By Others", "Labour": 50},
+    "Water Meter Pulsed Input": {"Part": "Device By Others", "Labour": 50},
+    "Electricity Meter Pulsed Input": {"Part": "Device By Others", "Labour": 50}
 }
 
 def tiene_puntos(row):
@@ -131,20 +104,16 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
 
     if "common lphw" in ai and ("common lphw" in tpl or "common chw" in tpl): return True
     if "boiler" in ai and tpl == "boiler": return True
-    
     if "pump" in ai and "pump" in tpl:
         if "recovery" not in tpl: return True
-            
     if "pressurisation" in ai and "pressurisation unit" in tpl: return True
     if "calorifier" in ai and (tpl == "calorifier" or tpl.startswith("hot water generator")): return True
     if "ahu" in ai and (tpl == "ahu" or tpl == "air handling units" or tpl == "air handling unit"): return True
     if "fcu" in ai and (tpl == "fcu" or "fan coil" in tpl): return True
     if "tank" in ai and "tank" in tpl: return True
     if "chiller" in ai and (tpl == "chiller" or tpl == "chillers"): return True
-    
     if "extract fan" in ai and "extract fan" in tpl: return True
     if "metering" in ai and "metering" in tpl: return True
-    
     return False
 
 def fuzzy_match_strict(ai_str, tpl_str):
@@ -153,7 +122,6 @@ def fuzzy_match_strict(ai_str, tpl_str):
     
     ai_words = set(re.findall(r'[a-z0-9]+', ai_orig))
     tpl_words = set(re.findall(r'[a-z0-9]+', tpl_orig))
-    
     if not ai_words or not tpl_words: return False
 
     if len(ai_words) <= 2:
@@ -235,7 +203,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             for r in range(start_row, req_row):
                 desc_cell = ws.cell(row=r, column=2).value
                 part_cell = ws.cell(row=r, column=9).value
-                
                 if desc_cell and not part_cell:
                     if fuzzy_match_parent(ai_p_desc, desc_cell):
                         if not any(g.get("best_match_row") == r for g in ai_groups):
@@ -250,15 +217,12 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             next_boundary = matched_groups[i+1]["best_match_row"] if i + 1 < len(matched_groups) else green_row_idx
             
             p_item = group["parent"]
-            ai_p_desc = p_item.get("Description", "")
-            qty_str = str(p_item.get("Quantity", "1")).strip()
-            parent_qty = int(qty_str) if qty_str.isdigit() else 1
-            
-            # 1. LIMPIEZA DE NOMBRES FEOS: Sobreescribe los títulos sucios de la plantilla (Ej. Extract Fans)
-            ws.cell(row=best_match_row, column=2).value = ai_p_desc
-            
+            ws.cell(row=best_match_row, column=2).value = p_item.get("Description", "")
             ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
             ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
+            
+            qty_str = str(p_item.get("Quantity", "1")).strip()
+            parent_qty = int(qty_str) if qty_str.isdigit() else 1
             
             missing_children = []
             for child in group["children"]:
@@ -275,16 +239,14 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                 if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
                                 if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
                                 
-                                # 2. CALCULO MATEMATICO SEGURO PARA EL EXCEL PRINCIPAL
+                                # CÁLCULO ESTRICTO DE PRECIO EN PLANTILLA ORIGINARIA
                                 cat_item = get_catalog_data(ai_c_desc)
-                                part_no = child.get("Part No.", "")
-                                if not part_no and cat_item: part_no = cat_item.get("Part", "")
-                                
+                                part_no = cat_item.get("Part", "") if cat_item else ""
                                 base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
-                                calc_labour = base_labour * parent_qty if base_labour > 0 else ""
+                                calc_labour = base_labour * parent_qty
                                 
                                 if part_no: ws.cell(row=cr, column=9).value = part_no
-                                if calc_labour: ws.cell(row=cr, column=12).value = calc_labour
+                                if calc_labour > 0: ws.cell(row=cr, column=12).value = calc_labour
                                 
                                 child_matched = True
                                 break 
@@ -301,7 +263,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
 
         if orphans_to_insert:
             total_insert = sum(1 + len(org["children"]) for org in orphans_to_insert)
-                
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
                 
@@ -318,10 +279,11 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     p_item = org["parent"]
                     titulo = p_item.get("Description", "")
                     
+                    ws.cell(row=current_insert_row, column=2, value=titulo)
+                    
                     qty_str = str(p_item.get("Quantity", "1")).strip()
                     parent_qty = int(qty_str) if qty_str.isdigit() else 1
                     
-                    ws.cell(row=current_insert_row, column=2, value=titulo)
                     if not org["is_partial"]:
                         ws.cell(row=current_insert_row, column=7, value=p_item.get("MCC", ""))
                         ws.cell(row=current_insert_row, column=8, value=p_item.get("Quantity", ""))
@@ -340,16 +302,14 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
                         ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
                         
-                        # 3. CALCULO MATEMATICO SEGURO PARA HUERFANOS
+                        # INYECCIÓN FINAL DE PRECIOS PARA HUÉRFANOS
                         cat_item = get_catalog_data(ai_c_desc)
-                        part_no = child.get("Part No.", "")
-                        if not part_no and cat_item: part_no = cat_item.get("Part", "")
-                        
+                        part_no = cat_item.get("Part", "") if cat_item else ""
                         base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
-                        calc_labour = base_labour * parent_qty if base_labour > 0 else ""
+                        calc_labour = base_labour * parent_qty
                         
                         if part_no: ws.cell(row=current_insert_row, column=9).value = part_no
-                        if calc_labour: ws.cell(row=current_insert_row, column=12).value = calc_labour
+                        if calc_labour > 0: ws.cell(row=current_insert_row, column=12).value = calc_labour
                         
                         for c in range(2, 13):
                             ws.cell(row=current_insert_row, column=c).font = fuente_item

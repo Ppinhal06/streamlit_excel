@@ -140,9 +140,7 @@ def fuzzy_match_parent(ai_str, tpl_str):
     if "chiller" in ai_words and "chiller" in tpl_words: return True
     if "pump" in ai_words and "pump" in tpl_words: return True
     if "tank" in ai_words and "tank" in tpl_words: return True
-    
-    if "extract" in ai_words and "fan" in ai_words and "extract" in tpl_words and "fan" in tpl_words: 
-        return True
+    if "extract" in ai_words and "fan" in ai_words and "extract" in tpl_words and "fan" in tpl_words: return True
     
     if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.70:
         return True
@@ -191,19 +189,17 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
             if val in ["BMS Requirements", "Summary"]:
-                req_row = r
+                req_row = r - 2 if (r - 2) > start_row else r
                 break
                 
-        # Detección exacta de la frontera verde para los huérfanos
+        # Buscar la línea verde (Index 42)
         green_row_idx = req_row
         for r in range(start_row, req_row):
             fill = ws.cell(row=r, column=2).fill
-            # La franja verde gruesa típica de tu plantilla
             if fill and fill.fgColor and fill.fgColor.type == 'indexed' and fill.fgColor.indexed == 42:
                 green_row_idx = r
                 break
                 
-        # Limpiar cantidades preexistentes
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
                 ws.cell(row=r, column=c).value = None 
@@ -221,7 +217,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if current_ai_parent:
                     current_ai_parent["children"].append(item)
 
-        # 1. Encontrar las posiciones de todos los padres que sí existen en la plantilla
         for group in ai_groups:
             ai_p_desc = group["parent"].get("Description", "")
             for r in range(start_row, req_row):
@@ -230,18 +225,16 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 
                 if desc_cell and not part_cell:
                     if fuzzy_match_parent(ai_p_desc, desc_cell):
-                        # Que ningún otro grupo lo haya reclamado ya
                         if not any(g.get("best_match_row") == r for g in ai_groups):
                             group["best_match_row"] = r
                             break
 
-        # 2. Mapear hijos dentro de fronteras exactas (Para que AHU no se corte a la mitad)
         matched_groups = sorted([g for g in ai_groups if g["best_match_row"]], key=lambda x: x["best_match_row"])
         orphans_to_insert = []
         
         for i, group in enumerate(matched_groups):
             best_match_row = group["best_match_row"]
-            # El límite de búsqueda es donde empieza el siguiente equipo, o la franja verde
+            # Definir límite de búsqueda estricto sin usar "break" prematuro
             next_boundary = matched_groups[i+1]["best_match_row"] if i + 1 < len(matched_groups) else green_row_idx
             
             p_item = group["parent"]
@@ -254,7 +247,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 child_matched = False
                 
                 for cr in range(best_match_row + 1, next_boundary):
-                    c_desc = ws.cell(row=cr, column=2).value
+                    c_desc = str(ws.cell(row=cr, column=2).value or "").strip()
                     if c_desc:
                         if fuzzy_match_strict(ai_c_desc, c_desc):
                             if not ws.cell(row=cr, column=3).value and not ws.cell(row=cr, column=6).value:
@@ -262,8 +255,17 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                 if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
                                 if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
                                 if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
-                                if child.get("Part No."): ws.cell(row=cr, column=9).value = child.get("Part No.")
-                                if child.get("Labour At 20%"): ws.cell(row=cr, column=12).value = child.get("Labour At 20%")
+                                
+                                # Inyección Blindada de Precios
+                                part_no = child.get("Part No.", "")
+                                labour = child.get("Labour At 20%", "") or child.get("Labour", "")
+                                cat_item = component_catalog.get(ai_c_desc)
+                                if not part_no and cat_item: part_no = cat_item.get("Part", "")
+                                if not labour and cat_item: labour = cat_item.get("Labour", "")
+                                
+                                if part_no: ws.cell(row=cr, column=9).value = part_no
+                                if labour: ws.cell(row=cr, column=12).value = labour
+                                
                                 child_matched = True
                                 break 
                                 
@@ -273,12 +275,11 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             if missing_children:
                 orphans_to_insert.append({"parent": p_item, "children": missing_children, "is_partial": True})
                 
-        # 3. Equipos enteros que no existían en la plantilla (Ej. FCUs)
         for group in ai_groups:
             if not group.get("best_match_row"):
                 orphans_to_insert.append({"parent": group["parent"], "children": group["children"], "is_partial": False})
 
-        # --- RESCATE ESTÉTICO (Justo arriba de la franja verde) ---
+        # --- RESCATE ESTÉTICO (Justo arriba de la línea verde, con precios y sin sufijos feos) ---
         if orphans_to_insert:
             total_insert = 0
             for org in orphans_to_insert:
@@ -299,7 +300,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 current_insert_row = green_row_idx
                 for org in orphans_to_insert:
                     p_item = org["parent"]
-                    # Nombre pulcro, idéntico al catálogo. 
                     titulo = p_item.get("Description", "")
                     
                     ws.cell(row=current_insert_row, column=2, value=titulo)
@@ -314,15 +314,21 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     current_insert_row += 1
                     
                     for child in org["children"]:
-                        ws.cell(row=current_insert_row, column=2, value=child.get("Description", ""))
+                        ai_c_desc = child.get("Description", "")
+                        ws.cell(row=current_insert_row, column=2, value=ai_c_desc)
                         ws.cell(row=current_insert_row, column=3, value=child.get("AI", ""))
                         ws.cell(row=current_insert_row, column=4, value=child.get("AO", ""))
                         ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
                         ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
                         
-                        # INYECCIÓN DE PRECIOS PARA ORFANATOS
-                        ws.cell(row=current_insert_row, column=9, value=child.get("Part No.", ""))
-                        ws.cell(row=current_insert_row, column=12, value=child.get("Labour At 20%", ""))
+                        part_no = child.get("Part No.", "")
+                        labour = child.get("Labour At 20%", "") or child.get("Labour", "")
+                        cat_item = component_catalog.get(ai_c_desc)
+                        if not part_no and cat_item: part_no = cat_item.get("Part", "")
+                        if not labour and cat_item: labour = cat_item.get("Labour", "")
+                        
+                        ws.cell(row=current_insert_row, column=9, value=part_no)
+                        ws.cell(row=current_insert_row, column=12, value=labour)
                         
                         for c in range(2, 13):
                             ws.cell(row=current_insert_row, column=c).font = fuente_item
@@ -331,7 +337,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # I/O SCHEDULE (Intacto y Perfecto)
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True
@@ -419,7 +424,6 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- FILTRO ANTI-CEROS DE SEGURIDAD EXTREMA ---
                 for item in materials_data:
                     for key, val in item.items():
                         if val == 0 or val == "0" or val == "0.0":

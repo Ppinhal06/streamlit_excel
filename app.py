@@ -214,7 +214,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
 
     if not es_io_schedule:
-        # === QUOTATION INTACTO ===
         req_row = ws.max_row
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
@@ -356,16 +355,115 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # === NUEVO I/O SCHEDULE CONSOLIDADO BOM ===
-        fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
-        fuente_header = copy.copy(fuente_base)
-        fuente_header.bold = True
-        fuente_item = copy.copy(fuente_base)
-        fuente_item.bold = False 
-        borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
-        alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
+        # === I/O SCHEDULE: CONSOLIDACIÓN Y DESGLOSE POR EQUIPO ===
+        for r in range(start_row, ws.max_row + 1):
+            for c in [2, 3, 4, 5, 6, 7, 8, 9]:
+                ws.cell(row=r, column=c).value = None
+        
+        aggregated_io = {}
+        ai_groups_io = []
+        current_ai_parent_io = None
+        for item in datos:
+            desc = str(item.get("Description", "")).strip()
+            part = str(item.get("Part No.", "")).strip()
+            if desc and not part and not tiene_puntos(item):
+                current_ai_parent_io = {"parent": item, "children": []}
+                ai_groups_io.append(current_ai_parent_io)
+            else:
+                if current_ai_parent_io:
+                    current_ai_parent_io["children"].append(item)
 
-        for idx, row_data in enumerate(datos):
+        for group in ai_groups_io:
+            p_item = group["parent"]
+            # Extraemos un nombre corto del equipo para que se lea limpio
+            p_name = p_item.get("Description", "System").split("(")[0].strip()
+            
+            qty_str = str(p_item.get("Quantity", "1")).strip()
+            p_qty = int(qty_str) if qty_str.isdigit() else 1
+            
+            for child in group["children"]:
+                desc = str(child.get("Description", "")).strip()
+                cat_item = get_catalog_data(desc)
+                part_no = str(child.get("Part No.", "")).strip()
+                if not part_no and cat_item:
+                    part_no = cat_item.get("Part", "")
+                
+                agg_key = part_no.strip().lower() if part_no.strip() else desc.strip().lower()
+                if not agg_key:
+                    continue
+                    
+                if agg_key not in aggregated_io:
+                    clean_desc = desc
+                    if part_no:
+                        if part_no.lower() == "volt free contacts":
+                            clean_desc = "Software/Relay Interfaces (Enable/Status/Fault)"
+                        elif part_no.lower() == "device by others":
+                            clean_desc = "3rd Party Device Interface"
+                        else:
+                            for k, v in component_catalog.items():
+                                if v.get("Part", "").strip().lower() == part_no.strip().lower():
+                                    clean_desc = k.replace("Boiler ", "").replace("Chiller ", "").replace("Header ", "").replace("Pump ", "")
+                                    break
+                                
+                    aggregated_io[agg_key] = {
+                        "Description": clean_desc,
+                        "Part No.": part_no,
+                        "Quantity": 0,
+                        "AI": 0, "AO": 0, "DI": 0, "DO": 0,
+                        "Breakdown": {} # Aquí guardaremos a qué equipo pertenece
+                    }
+                    
+                def get_val(val):
+                    v = str(val).strip()
+                    return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
+                
+                ai = get_val(child.get("AI", 0))
+                ao = get_val(child.get("AO", 0))
+                di = get_val(child.get("DI", 0))
+                do = get_val(child.get("DO", 0))
+                
+                aggregated_io[agg_key]["AI"] += ai
+                aggregated_io[agg_key]["AO"] += ao
+                aggregated_io[agg_key]["DI"] += di
+                aggregated_io[agg_key]["DO"] += do
+                
+                line_qty = max(ai, ao, di, do)
+                if line_qty == 0:
+                    line_qty = p_qty
+                    
+                aggregated_io[agg_key]["Quantity"] += line_qty
+                
+                # Desglose matemático por equipo
+                if p_name not in aggregated_io[agg_key]["Breakdown"]:
+                    aggregated_io[agg_key]["Breakdown"][p_name] = 0
+                aggregated_io[agg_key]["Breakdown"][p_name] += line_qty
+
+        datos_io_procesados = []
+        datos_io_procesados.append({
+            "Description": "Consolidated Material Breakdown",
+            "Part No.": "", "Quantity": "", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": ""
+        })
+        
+        sorted_keys = sorted(aggregated_io.keys(), key=lambda k: aggregated_io[k]["Description"])
+        
+        for k in sorted_keys:
+            data = aggregated_io[k]
+            # Formateador del desglose para la columna Descripción
+            breakdown_str = " + ".join([f"{sys}: {q}" for sys, q in data["Breakdown"].items()])
+            final_desc = f"{data['Description']}  [{breakdown_str}]"
+            
+            datos_io_procesados.append({
+                "Description": final_desc,
+                "Part No.": data["Part No."],
+                "Quantity": data["Quantity"] if data["Quantity"] > 0 else "",
+                "AI": data["AI"] if data["AI"] > 0 else "",
+                "AO": data["AO"] if data["AO"] > 0 else "",
+                "DI": data["DI"] if data["DI"] > 0 else "",
+                "DO": data["DO"] if data["DO"] > 0 else "",
+                "MCC": ""
+            })
+
+        for idx, row_data in enumerate(datos_io_procesados):
             current_row = start_row + idx
             desc = str(row_data.get("Description", "")).strip()
             part = str(row_data.get("Part No.", "")).strip()
@@ -381,7 +479,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             
             clonar_estilo_columna(ws, start_row, current_row, es_padre=es_header)
 
-        last_row = start_row + len(datos) - 1
+        last_row = start_row + len(datos_io_procesados) - 1
         delete_start = last_row + 1
         ws.print_area = ""
         delete_amount = ws.max_row - delete_start + 1
@@ -443,99 +541,24 @@ if st.button("Generate Points List"):
                 
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
-                # --- NUEVA DINÁMICA DE I/O SCHEDULE (CONSOLIDACIÓN BOM) ---
-                ai_groups_io = []
-                current_ai_parent_io = None
-                for item in materials_data:
-                    desc = str(item.get("Description", "")).strip()
-                    part = str(item.get("Part No.", "")).strip()
-                    
-                    if desc and not part and not tiene_puntos(item):
-                        current_ai_parent_io = {"parent": item, "children": []}
-                        ai_groups_io.append(current_ai_parent_io)
-                    else:
-                        if current_ai_parent_io:
-                            current_ai_parent_io["children"].append(item)
-
-                aggregated_io = {}
-                for group in ai_groups_io:
-                    p_item = group["parent"]
-                    qty_str = str(p_item.get("Quantity", "1")).strip()
-                    p_qty = int(qty_str) if qty_str.isdigit() else 1
-                    
-                    for child in group["children"]:
-                        desc = str(child.get("Description", "")).strip()
-                        cat_item = get_catalog_data(desc)
-                        part_no = str(child.get("Part No.", "")).strip()
-                        if not part_no and cat_item:
-                            part_no = cat_item.get("Part", "")
-                        
-                        agg_key = part_no.strip().lower() if part_no.strip() else desc.strip().lower()
-                        if not agg_key:
-                            continue
-                            
-                        if agg_key not in aggregated_io:
-                            clean_desc = desc
-                            if part_no:
-                                if part_no.lower() == "volt free contacts":
-                                    clean_desc = "Software/Relay Interfaces (Enable/Status/Fault)"
-                                elif part_no.lower() == "device by others":
-                                    clean_desc = "3rd Party Device Interface"
-                                else:
-                                    for k, v in component_catalog.items():
-                                        if v.get("Part", "").strip().lower() == part_no.strip().lower():
-                                            clean_desc = k.replace("Boiler ", "").replace("Chiller ", "").replace("Header ", "")
-                                            break
-                                        
-                            aggregated_io[agg_key] = {
-                                "Description": clean_desc,
-                                "Part No.": part_no,
-                                "Quantity": 0,
-                                "AI": 0, "AO": 0, "DI": 0, "DO": 0
-                            }
-                            
-                        def get_val(val):
-                            v = str(val).strip()
-                            return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
-                        
-                        ai = get_val(child.get("AI", 0))
-                        ao = get_val(child.get("AO", 0))
-                        di = get_val(child.get("DI", 0))
-                        do = get_val(child.get("DO", 0))
-                        
-                        aggregated_io[agg_key]["AI"] += ai
-                        aggregated_io[agg_key]["AO"] += ao
-                        aggregated_io[agg_key]["DI"] += di
-                        aggregated_io[agg_key]["DO"] += do
-                        
-                        line_qty = max(ai, ao, di, do)
-                        if line_qty == 0:
-                            line_qty = p_qty
-                            
-                        aggregated_io[agg_key]["Quantity"] += line_qty
-
                 datos_io = []
-                datos_io.append({
-                    "Description": "Consolidated Component & I/O List",
-                    "Part No.": "",
-                    "Quantity": "",
-                    "AI": "", "AO": "", "DI": "", "DO": "", "MCC": ""
-                })
-                
-                sorted_keys = sorted(aggregated_io.keys(), key=lambda k: aggregated_io[k]["Description"])
-                
-                for k in sorted_keys:
-                    data = aggregated_io[k]
-                    datos_io.append({
-                        "Description": data["Description"],
-                        "Part No.": data["Part No."],
-                        "Quantity": data["Quantity"] if data["Quantity"] > 0 else "",
-                        "AI": data["AI"] if data["AI"] > 0 else "",
-                        "AO": data["AO"] if data["AO"] > 0 else "",
-                        "DI": data["DI"] if data["DI"] > 0 else "",
-                        "DO": data["DO"] if data["DO"] > 0 else "",
-                        "MCC": ""
-                    })
+                headers_pendientes = []
+                for row in materials_data:
+                    desc = str(row.get("Description", "")).strip()
+                    part = str(row.get("Part No.", "")).strip()
+                    qty = str(row.get("Quantity", "")).strip()
+                    
+                    es_header = bool(desc) and not bool(part) and not tiene_puntos(row)
+                    if es_header:
+                        if not qty:
+                            pass 
+                        else:
+                            headers_pendientes.append(row)
+                    elif tiene_puntos(row):
+                        for h in headers_pendientes:
+                            datos_io.append(h)
+                        headers_pendientes = [] 
+                        datos_io.append(row)
 
                 buffer_filtrado = crear_excel_formateado(datos_io, project_name, es_io_schedule=True)
                 
@@ -555,4 +578,4 @@ if st.session_state.generado:
     with col_btn1:
         st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

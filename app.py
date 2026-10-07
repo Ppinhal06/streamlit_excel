@@ -147,7 +147,6 @@ def get_catalog_data(desc):
             return v
     return {}
 
-# 1. ACTUALIZADOR MÁGICO DE FÓRMULAS
 def actualizar_formulas(ws, green_idx, total_insert):
     def replacer(match):
         col = match.group(1)
@@ -168,7 +167,6 @@ def actualizar_formulas(ws, green_idx, total_insert):
                 if cell.value != new_formula:
                     cell.value = new_formula
 
-# 2. EL SALVADOR DE CELDAS COMBINADAS (Adiós a los #####)
 def reparar_celdas_combinadas(ws, green_idx, total_insert):
     new_merged = set()
     old_merged_list = list(ws.merged_cells.ranges)
@@ -185,7 +183,6 @@ def reparar_celdas_combinadas(ws, green_idx, total_insert):
     for mcr in new_merged:
         ws.merged_cells.add(mcr)
 
-# 3. CLONADOR DE ESTILOS PERFECTO
 def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
     for c in range(1, 15):
         try:
@@ -280,8 +277,12 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
             ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
             
-            qty_str = str(p_item.get("Quantity", "1")).strip()
-            parent_qty = int(qty_str) if qty_str.isdigit() else 1
+            # PARCHE CHILLER MAINS
+            # Si el equipo es Chiller y la fila de abajo es "Chiller Mains", le clonamos la cantidad
+            if "chiller" in tpl_name.lower():
+                next_desc = str(ws.cell(row=best_match_row + 1, column=2).value or "").strip()
+                if "chiller mains" in next_desc.lower():
+                    ws.cell(row=best_match_row + 1, column=8).value = p_item.get("Quantity", "")
             
             missing_children = []
             for child in group["children"]:
@@ -297,17 +298,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                 if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
                                 if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
                                 if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
-                                
-                                cat_item = get_catalog_data(ai_c_desc)
-                                part_no = child.get("Part No.", "")
-                                if not part_no and cat_item: part_no = cat_item.get("Part", "")
-                                
-                                base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
-                                calc_labour = base_labour * parent_qty
-                                
-                                if part_no: ws.cell(row=cr, column=9).value = part_no
-                                if calc_labour > 0: ws.cell(row=cr, column=12).value = calc_labour
-                                
                                 child_matched = True
                                 break 
                                 
@@ -327,7 +317,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
                 
-                # REPARADORES MAESTROS (Fórmulas y Anchos de Celda)
                 actualizar_formulas(ws, green_row_idx, total_insert)
                 reparar_celdas_combinadas(ws, green_row_idx, total_insert)
                 
@@ -368,6 +357,14 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
+        fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
+        fuente_header = copy.copy(fuente_base)
+        fuente_header.bold = True
+        fuente_item = copy.copy(fuente_base)
+        fuente_item.bold = False 
+        borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
+        alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
+
         for idx, row_data in enumerate(datos):
             current_row = start_row + idx
             desc = str(row_data.get("Description", "")).strip()
@@ -381,9 +378,13 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 11: row_data.get("Parts At 0%", ""), 12: row_data.get("Labour At 20%", "")
             }
             for col_num, val in col_map.items():
-                ws.cell(row=current_row, column=col_num, value=val)
-            
-            clonar_estilo_columna(ws, start_row, current_row, es_padre=es_header)
+                try:
+                    cell = ws.cell(row=current_row, column=col_num, value=val)
+                    cell.font = fuente_header if es_header else fuente_item
+                    cell.border = borde_base
+                    cell.alignment = alineacion_base
+                except AttributeError:
+                    pass
 
         last_row = start_row + len(datos) - 1
         delete_start = last_row + 1

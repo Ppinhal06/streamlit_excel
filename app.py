@@ -27,9 +27,10 @@ with st.sidebar:
 
 if api_key:
     genai.configure(api_key=api_key)
+    # Ajustado al modelo que usas en producción
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# 2. Base de Conocimiento Expandida
+# 2. Base de Conocimiento
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {
         "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
@@ -113,41 +114,29 @@ component_catalog = {
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- COMPARADOR LINEAL ESTRICTO ---
-def buscar_fila_para_inyectar(item_ai, ws, start_row, end_row):
-    ai_desc = str(item_ai.get("Description", "")).strip().lower()
+# --- COMPARADOR ESTRICTO ---
+def fuzzy_match_strict(ai_str, tpl_str):
+    ai_orig = str(ai_str).strip().lower().replace("temp ", "temperature ")
+    tpl_orig = str(tpl_str).strip().lower().replace("temp ", "temperature ")
     
-    # Normalización
-    ai_desc = ai_desc.replace("temp ", "temperature ")
-    ai_desc = ai_desc.replace("return air", "extract air")
-    ai_desc = ai_desc.replace("pump", "pumps").replace("pumpss", "pumps")
+    ai_words = set(re.findall(r'[a-z0-9]+', ai_orig))
+    tpl_words = set(re.findall(r'[a-z0-9]+', tpl_orig))
     
-    # 1. Búsqueda exacta
-    for r in range(start_row, end_row):
-        tpl_desc = str(ws.cell(row=r, column=2).value or "").strip().lower()
-        if tpl_desc == ai_desc:
-            if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
-                return r
+    if not ai_words or not tpl_words: return False
 
-    # 2. Búsqueda estricta por palabras
-    ai_words = set(re.findall(r'[a-z0-9]+', ai_desc))
+    if len(ai_words) <= 2:
+        if ai_orig == tpl_orig: return True
+        if ai_words == tpl_words: return True
+        if len(tpl_words) <= 3 and ai_words.issubset(tpl_words): return True
+        return False
+        
+    if ai_words == tpl_words: return True
+    if ai_words.issubset(tpl_words): return True
     
-    if len(ai_words) > 2: 
-        for r in range(start_row, end_row):
-            tpl_desc = str(ws.cell(row=r, column=2).value or "").strip().lower()
-            if not tpl_desc: continue
-                
-            tpl_words = set(re.findall(r'[a-z0-9]+', tpl_desc))
-            
-            if ai_words.issubset(tpl_words) or tpl_words.issubset(ai_words):
-                if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
-                    return r
-                    
-            if SequenceMatcher(None, ai_desc, tpl_desc).ratio() > 0.85:
-                if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
-                    return r
-                    
-    return None
+    if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.85:
+        return True
+        
+    return False
 
 def tiene_puntos(row):
     for io_type in ["AI", "AO", "DI", "DO"]:
@@ -174,7 +163,9 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
 
     if not es_io_schedule:
-        # COTIZACIÓN OFICIAL
+        # ==========================================
+        # COTIZACIÓN OFICIAL: Mapeo y Rescate de Huérfanos
+        # ==========================================
         req_row = ws.max_row
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
@@ -182,28 +173,140 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 req_row = r
                 break
                 
-        # Limpiar basuras de fábrica
+        # Limpiar los 1s fantasmas de fábrica
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
                 ws.cell(row=r, column=c).value = None 
 
+        ai_groups = []
+        current_ai_parent = None
         for item in datos:
-            if not str(item.get("Quantity", "")).strip() and not tiene_puntos(item):
-                continue
-
-            fila_destino = buscar_fila_para_inyectar(item, ws, start_row, req_row)
+            desc = str(item.get("Description", "")).strip()
+            part = str(item.get("Part No.", "")).strip()
             
-            if fila_destino:
-                if item.get("Quantity"): ws.cell(row=fila_destino, column=8).value = item.get("Quantity")
-                if item.get("MCC"): ws.cell(row=fila_destino, column=7).value = item.get("MCC")
-                if item.get("AI"): ws.cell(row=fila_destino, column=3).value = item.get("AI")
-                if item.get("AO"): ws.cell(row=fila_destino, column=4).value = item.get("AO")
-                if item.get("DI"): ws.cell(row=fila_destino, column=5).value = item.get("DI")
-                if item.get("DO"): ws.cell(row=fila_destino, column=6).value = item.get("DO")
-                if item.get("Labour At 20%"): ws.cell(row=fila_destino, column=12).value = item.get("Labour At 20%")
+            if desc and not part and not tiene_puntos(item):
+                current_ai_parent = {"parent": item, "children": []}
+                ai_groups.append(current_ai_parent)
+            else:
+                if current_ai_parent:
+                    current_ai_parent["children"].append(item)
+
+        orphans_to_insert = []
+
+        for group in ai_groups:
+            p_item = group["parent"]
+            ai_p_desc = p_item.get("Description", "")
+            
+            best_match_row = None
+            # Buscar el equipo principal
+            for r in range(start_row, req_row):
+                desc_cell = ws.cell(row=r, column=2).value
+                part_cell = ws.cell(row=r, column=9).value
+                
+                if desc_cell and not part_cell:
+                    if fuzzy_match_strict(ai_p_desc, desc_cell):
+                        if not ws.cell(row=r, column=8).value:
+                            best_match_row = r
+                            break
+                            
+            if best_match_row:
+                # Mapear Padre
+                ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
+                ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
+                
+                missing_children = []
+                for child in group["children"]:
+                    ai_c_desc = child.get("Description", "")
+                    child_matched = False
+                    
+                    # Buscar componentes dentro de este bloque
+                    for cr in range(best_match_row + 1, req_row):
+                        c_desc = ws.cell(row=cr, column=2).value
+                        c_part = ws.cell(row=cr, column=9).value
+                        
+                        if c_desc and not c_part:
+                            break # Termina el bloque de este equipo
+                            
+                        if c_desc:
+                            if fuzzy_match_strict(ai_c_desc, c_desc):
+                                if not ws.cell(row=cr, column=3).value and not ws.cell(row=cr, column=6).value:
+                                    if child.get("AI"): ws.cell(row=cr, column=3).value = child.get("AI")
+                                    if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
+                                    if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
+                                    if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
+                                    if child.get("Labour At 20%"): ws.cell(row=cr, column=12).value = child.get("Labour At 20%")
+                                    child_matched = True
+                                    break 
+                                    
+                    if not child_matched:
+                        missing_children.append(child)
+                        
+                if missing_children:
+                    # Encontró el equipo pero le faltaron piezas (Raro, pero seguro)
+                    orphans_to_insert.append({"parent": p_item, "children": missing_children, "is_partial": True})
+            else:
+                # El equipo entero NO EXISTE en la plantilla (Ej. Los famosos FCUs)
+                orphans_to_insert.append({"parent": p_item, "children": group["children"], "is_partial": False})
+
+        # --- MOTOR DE CREACIÓN DE FILAS (El Rescate) ---
+        if orphans_to_insert:
+            total_insert = 0
+            for org in orphans_to_insert:
+                total_insert += 1 # El encabezado siempre va
+                total_insert += len(org["children"])
+                
+            if total_insert > 0:
+                # Insertamos las filas limpiamente justo antes de los totales
+                ws.insert_rows(req_row, total_insert)
+                
+                # Extraemos el diseño corporativo
+                fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
+                fuente_header = copy.copy(fuente_base)
+                fuente_header.bold = True
+                fuente_item = copy.copy(fuente_base)
+                fuente_item.bold = False 
+                borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
+                alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
+                
+                current_insert_row = req_row
+                for org in orphans_to_insert:
+                    p_item = org["parent"]
+                    
+                    # Escribimos el Encabezado Padre
+                    titulo = p_item.get("Description", "")
+                    if org["is_partial"]: titulo += " (Additional Components)"
+                    
+                    ws.cell(row=current_insert_row, column=2, value=titulo)
+                    if not org["is_partial"]:
+                        ws.cell(row=current_insert_row, column=7, value=p_item.get("MCC", ""))
+                        ws.cell(row=current_insert_row, column=8, value=p_item.get("Quantity", ""))
+                        
+                    for c in range(2, 13):
+                        ws.cell(row=current_insert_row, column=c).font = fuente_header
+                        ws.cell(row=current_insert_row, column=c).border = borde_base
+                        ws.cell(row=current_insert_row, column=c).alignment = alineacion_base
+                    current_insert_row += 1
+                    
+                    # Escribimos los Hijos
+                    for child in org["children"]:
+                        ws.cell(row=current_insert_row, column=2, value=child.get("Description", ""))
+                        ws.cell(row=current_insert_row, column=3, value=child.get("AI", ""))
+                        ws.cell(row=current_insert_row, column=4, value=child.get("AO", ""))
+                        ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
+                        ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
+                        ws.cell(row=current_insert_row, column=9, value=child.get("Part No.", ""))
+                        ws.cell(row=current_insert_row, column=12, value=child.get("Labour At 20%", ""))
+                        
+                        for c in range(2, 13):
+                            ws.cell(row=current_insert_row, column=c).font = fuente_item
+                            ws.cell(row=current_insert_row, column=c).border = borde_base
+                            ws.cell(row=current_insert_row, column=c).alignment = alineacion_base
+                        current_insert_row += 1
 
     else:
-        # I/O SCHEDULE
+        # ==========================================
+        # I/O SCHEDULE (Clásico y Limpio)
+        # ==========================================
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True
@@ -254,7 +357,7 @@ with col1:
 with col2:
     project_description = st.text_area(
         "Project Scope Description:", 
-        placeholder="Example: We need a plant with 2 Boilers, 3 Primary Pumps, 1 Storage Tank, and Metering."
+        placeholder="Example: We need a plant with 2 Boilers, 60 FCUs, and 1 Chiller."
     )
 
 st.markdown("---")
@@ -263,7 +366,7 @@ if st.button("Generate Points List"):
     if not api_key or not project_description:
         st.warning("Please ensure you have entered your API Key and provided a project description.")
     else:
-        with st.spinner("Engineering system points and strictly mapping to template..."):
+        with st.spinner("Engineering system points and strictly mapping to template (appending missing items)..."):
             prompt = f"""
             You are an expert BEMS estimator working for DC Controls. Generate a Points List based on the description.
             
@@ -291,7 +394,7 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- NUEVO: FILTRO ANTI-CEROS DE SEGURIDAD ---
+                # --- FILTRO ANTI-CEROS DE SEGURIDAD ---
                 for item in materials_data:
                     for key, val in item.items():
                         if val == 0 or val == "0" or val == "0.0":
@@ -309,7 +412,6 @@ if st.button("Generate Points List"):
                     
                     es_header = bool(desc) and not bool(part) and not tiene_puntos(row)
                     if es_header:
-                        # Ya pasaron por el filtro anti-ceros, qty debería ser "" si venía en 0
                         if not qty:
                             pass 
                         else:

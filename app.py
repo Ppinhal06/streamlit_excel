@@ -27,9 +27,9 @@ with st.sidebar:
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 
-# 2. Base de Conocimiento
+# 2. Base de Conocimiento Expandida
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {
         "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
@@ -56,10 +56,10 @@ engineering_rules = {
         "per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]
     },
     "Chiller": {
-        "per_unit": ["Chiller Enable", "Chiller Status", "Chiller Flow Switch", "Chiller Flow Temp Sensor", "Chiller Return Temp Sensor"]
+        "per_unit": ["Chiller Enable and Status", "Chiller Flow Switch", "Chiller Flow Immersion Temperature Sensor", "Chiller Return Immersion Temperature Sensor"]
     },
     "Extract Fan": {
-        "per_unit": ["Fan Enable", "Fan Current Switch"]
+        "per_unit": ["Enable and Current Switch"]
     },
     "Metering": {
         "mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]
@@ -103,39 +103,36 @@ component_catalog = {
     "Tank Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Solenoid Valve 40mm": {"Part": "Solenoid Valve 40mm / ZS50", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Ultrasonic Level Transmitter": {"Part": "LS-MC", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Chiller Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Enable and Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Chiller Flow Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Return Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Fan Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Fan Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Enable and Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Gas Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Water Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-# --- COMPARADOR LINEAL INTELIGENTE (Traductor de Nomenclatura) ---
+# --- COMPARADOR LINEAL ESTRICTO ---
 def buscar_fila_para_inyectar(item_ai, ws, start_row, end_row):
     ai_desc = str(item_ai.get("Description", "")).strip().lower()
     
-    # Normalizar diccionarios (traducir lo que la IA dice a lo que el Template dice)
-    ai_desc = ai_desc.replace("temp sensor", "temperature sensor")
+    # Normalización
+    ai_desc = ai_desc.replace("temp ", "temperature ")
     ai_desc = ai_desc.replace("return air", "extract air")
     ai_desc = ai_desc.replace("pump", "pumps").replace("pumpss", "pumps")
     
-    # 1. Búsqueda de Coincidencia 100% Exacta (Ideal para "Enable", "Status")
+    # 1. Búsqueda exacta
     for r in range(start_row, end_row):
         tpl_desc = str(ws.cell(row=r, column=2).value or "").strip().lower()
         if tpl_desc == ai_desc:
-            # Revisar que no hayamos inyectado ya aquí (Quantity o Puntos)
             if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
                 return r
 
-    # 2. Búsqueda de Subconjunto de Palabras Clave (Ideal para Sensores Largos)
+    # 2. Búsqueda estricta por palabras
     ai_words = set(re.findall(r'[a-z0-9]+', ai_desc))
     
-    if len(ai_words) > 2: # No queremos meter "Enable" en "Pump Enable"
+    if len(ai_words) > 2: 
         for r in range(start_row, end_row):
             tpl_desc = str(ws.cell(row=r, column=2).value or "").strip().lower()
             if not tpl_desc: continue
@@ -146,7 +143,7 @@ def buscar_fila_para_inyectar(item_ai, ws, start_row, end_row):
                 if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
                     return r
                     
-            if SequenceMatcher(None, ai_desc, tpl_desc).ratio() > 0.82:
+            if SequenceMatcher(None, ai_desc, tpl_desc).ratio() > 0.85:
                 if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
                     return r
                     
@@ -177,6 +174,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
 
     if not es_io_schedule:
+        # COTIZACIÓN OFICIAL
         req_row = ws.max_row
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
@@ -184,14 +182,12 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 req_row = r
                 break
                 
-        # 1. Limpiar los ceros de fábrica
+        # Limpiar basuras de fábrica
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
                 ws.cell(row=r, column=c).value = None 
 
-        # 2. Inyección Lineal. Tomamos cada elemento de la IA y buscamos su lugar perfecto.
         for item in datos:
-            # Si el elemento no tiene cantidad ni puntos, no inyectamos nada
             if not str(item.get("Quantity", "")).strip() and not tiene_puntos(item):
                 continue
 
@@ -207,7 +203,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if item.get("Labour At 20%"): ws.cell(row=fila_destino, column=12).value = item.get("Labour At 20%")
 
     else:
-        # LÓGICA I/O SCHEDULE (Como siempre ha funcionado)
+        # I/O SCHEDULE
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True
@@ -284,6 +280,7 @@ if st.button("Generate Points List"):
             4. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI).
             5. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
             6. Use the exact Part No. from the catalog.
+            7. Leave IOs or Labour as completely empty strings ("") if the value is 0.
             
             User description: "{project_description}"
             
@@ -293,6 +290,13 @@ if st.button("Generate Points List"):
                 response = model.generate_content(prompt)
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
+                
+                # --- NUEVO: FILTRO ANTI-CEROS DE SEGURIDAD ---
+                for item in materials_data:
+                    for key, val in item.items():
+                        if val == 0 or val == "0" or val == "0.0":
+                            item[key] = ""
+                # ----------------------------------------------
                 
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
@@ -305,7 +309,8 @@ if st.button("Generate Points List"):
                     
                     es_header = bool(desc) and not bool(part) and not tiene_puntos(row)
                     if es_header:
-                        if qty == "0" or qty == 0:
+                        # Ya pasaron por el filtro anti-ceros, qty debería ser "" si venía en 0
+                        if not qty:
                             pass 
                         else:
                             headers_pendientes.append(row)

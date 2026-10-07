@@ -8,6 +8,7 @@ from difflib import SequenceMatcher
 from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
+from openpyxl.worksheet.cell_range import CellRange
 
 st.set_page_config(page_title="BEMS Estimator Pro - DC Controls", layout="wide")
 st.title("Automated BEMS Points List & Estimator")
@@ -146,6 +147,7 @@ def get_catalog_data(desc):
             return v
     return {}
 
+# 1. ACTUALIZADOR MÁGICO DE FÓRMULAS
 def actualizar_formulas(ws, green_idx, total_insert):
     def replacer(match):
         col = match.group(1)
@@ -166,12 +168,29 @@ def actualizar_formulas(ws, green_idx, total_insert):
                 if cell.value != new_formula:
                     cell.value = new_formula
 
-# CLONADOR PERFECTO DE ESTILOS COLUMNA POR COLUMNA
+# 2. EL SALVADOR DE CELDAS COMBINADAS (Adiós a los #####)
+def reparar_celdas_combinadas(ws, green_idx, total_insert):
+    new_merged = set()
+    old_merged_list = list(ws.merged_cells.ranges)
+    for mcr in old_merged_list:
+        if mcr.min_row >= green_idx:
+            new_mcr = CellRange(min_col=mcr.min_col, min_row=mcr.min_row + total_insert,
+                                max_col=mcr.max_col, max_row=mcr.max_row + total_insert)
+            new_merged.add(new_mcr)
+            ws.merged_cells.remove(mcr)
+        else:
+            new_merged.add(mcr)
+            ws.merged_cells.remove(mcr)
+            
+    for mcr in new_merged:
+        ws.merged_cells.add(mcr)
+
+# 3. CLONADOR DE ESTILOS PERFECTO
 def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
     for c in range(1, 15):
         try:
             fuente = copy.copy(ws.cell(row=source_row, column=c).font)
-            if c == 2: fuente.bold = es_padre # Negrita solo en la columna B si es padre
+            if c == 2: fuente.bold = es_padre
             
             ws.cell(row=target_row, column=c).font = fuente
             ws.cell(row=target_row, column=c).border = copy.copy(ws.cell(row=source_row, column=c).border)
@@ -215,7 +234,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         if green_row_idx == ws.max_row:
             green_row_idx = req_row
                 
-        # Limpieza estricta
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8]:
                 ws.cell(row=r, column=c).value = None 
@@ -262,6 +280,9 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
             ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
             
+            qty_str = str(p_item.get("Quantity", "1")).strip()
+            parent_qty = int(qty_str) if qty_str.isdigit() else 1
+            
             missing_children = []
             for child in group["children"]:
                 ai_c_desc = child.get("Description", "")
@@ -276,6 +297,17 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                 if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
                                 if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
                                 if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
+                                
+                                cat_item = get_catalog_data(ai_c_desc)
+                                part_no = child.get("Part No.", "")
+                                if not part_no and cat_item: part_no = cat_item.get("Part", "")
+                                
+                                base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
+                                calc_labour = base_labour * parent_qty
+                                
+                                if part_no: ws.cell(row=cr, column=9).value = part_no
+                                if calc_labour > 0: ws.cell(row=cr, column=12).value = calc_labour
+                                
                                 child_matched = True
                                 break 
                                 
@@ -294,7 +326,10 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
+                
+                # REPARADORES MAESTROS (Fórmulas y Anchos de Celda)
                 actualizar_formulas(ws, green_row_idx, total_insert)
+                reparar_celdas_combinadas(ws, green_row_idx, total_insert)
                 
                 current_insert_row = green_row_idx
                 for org in orphans_to_insert:
@@ -348,7 +383,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             for col_num, val in col_map.items():
                 ws.cell(row=current_row, column=col_num, value=val)
             
-            # Formateo rápido y parejo para el I/O
             clonar_estilo_columna(ws, start_row, current_row, es_padre=es_header)
 
         last_row = start_row + len(datos) - 1
@@ -448,6 +482,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

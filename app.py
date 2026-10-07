@@ -67,7 +67,7 @@ engineering_rules = {
     }
 }
 
-# 3. Technical Catalog (Expandido)
+# 3. Technical Catalog
 component_catalog = {
     "Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
@@ -119,7 +119,6 @@ component_catalog = {
 
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
-        # Cargamos el template con sus referencias originales intactas
         wb = load_workbook("template.xlsx")
     except FileNotFoundError:
         st.error("⚠️ The 'template.xlsx' file is missing from the repository.")
@@ -134,22 +133,17 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     
     start_row = 7 
     
-    # Fuentes diferenciadas para Títulos (Negrita) y Componentes (Normal)
     fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
-    
     fuente_header = copy.copy(fuente_base)
     fuente_header.bold = True
-    
     fuente_item = copy.copy(fuente_base)
     fuente_item.bold = False 
-    
     borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
     alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
 
     # Inyección de Datos
     for idx, row_data in enumerate(datos):
         current_row = start_row + idx
-        
         desc = str(row_data.get("Description", "")).strip()
         part = str(row_data.get("Part No.", "")).strip()
         es_header = bool(desc) and not bool(part) and not tiene_puntos(row_data)
@@ -164,28 +158,40 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         for col_num, val in col_map.items():
             try:
                 cell = ws.cell(row=current_row, column=col_num, value=val)
-                # Aplicamos la fuente correctamente
                 cell.font = fuente_header if es_header else fuente_item
                 cell.border = borde_base
                 cell.alignment = alineacion_base
             except AttributeError:
                 pass
 
-    # --- LIMPIEZA EXCLUSIVAMENTE PARA EL I/O SCHEDULE ---
+    # --- LIMPIEZA INTELIGENTE (ELIMINA LA BASURA DE LA PLANTILLA) ---
+    last_row = start_row + len(datos) - 1
+    delete_start = last_row + 1
+    ws.print_area = ""
+    
     if es_io_schedule:
-        last_row = start_row + len(datos) - 1
-        delete_start = last_row + 1
-        ws.print_area = "" # Resetear área de impresión
-        
         delete_amount = ws.max_row - delete_start + 1
         if delete_amount > 0:
             for mcr in list(ws.merged_cells.ranges):
                 if mcr.min_row >= delete_start:
                     ws.merged_cells.remove(mcr)
             ws.delete_rows(idx=delete_start, amount=delete_amount)
-            
-    # Si NO es I/O Schedule (es la Cotización principal), simplemente NO hace nada con las filas, 
-    # dejando el resumen, precios y notas exactamente donde estaban.
+    else:
+        # Aquí eliminamos los tanques y equipos estáticos de la cotización, 
+        # pero salvamos el cuadro de totales ("BMS Requirements")
+        req_row = None
+        for r in range(delete_start, ws.max_row + 1):
+            val = str(ws.cell(row=r, column=2).value).strip()
+            if val in ["BMS Requirements", "Summary"]:
+                req_row = r
+                break
+        
+        if req_row and req_row > delete_start:
+            delete_amount = req_row - delete_start
+            for mcr in list(ws.merged_cells.ranges):
+                if mcr.min_row >= delete_start and mcr.max_row < req_row:
+                    ws.merged_cells.remove(mcr)
+            ws.delete_rows(idx=delete_start, amount=delete_amount)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -231,7 +237,7 @@ if st.button("Generate Points List"):
             1. Create a HEADER ROW for each main equipment group. (e.g., Description: "Boiler", Quantity: 2, MCC: "MCB". Leave AI, AO, DI, DO, Labour blank).
             2. Below the header row, list its components based on the ENGINEERING RULES.
             3. CRITICAL RULE: For components (child rows), "Quantity" and "MCC" MUST be left completely blank (""). Only the HEADER ROW should contain the Quantity and MCC.
-            4. IF A SYSTEM IS NOT IN THE RULES (e.g., Generators, Fire Alarms, VAVs), infer standard BEMS components for it (Enable DO, Status DI, Fault DI) and use "Device By Others" or "Volt Free Contacts" as the Part No.
+            4. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI) and use "Device By Others" or "Volt Free Contacts" as the Part No.
             5. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
             6. Use the exact Part No. from the catalog.
             7. Leave IOs or Labour as empty strings ("") if the value is 0.
@@ -254,10 +260,10 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- EXCEL 1: DOCUMENTO COMPLETO (Intacto al final) ---
+                # --- EXCEL 1: DOCUMENTO COMPLETO (Ahora sí, cortando la basura de la plantilla) ---
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
 
-                # --- EXCEL 2: I/O SCHEDULE (Cortado y Filtrado) ---
+                # --- EXCEL 2: I/O SCHEDULE (Filtrado) ---
                 datos_io = []
                 headers_pendientes = []
                 

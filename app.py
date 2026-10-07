@@ -120,32 +120,31 @@ def tiene_puntos(row):
             return True
     return False
 
-def fuzzy_match_parent(ai_str, tpl_str):
-    ai_orig = str(ai_str).strip().lower().replace("temp ", "temperature ")
-    tpl_orig = str(tpl_str).strip().lower().replace("temp ", "temperature ")
+def fuzzy_match_parent(ai_desc, tpl_desc):
+    ai = str(ai_desc).lower()
+    tpl = str(tpl_desc).lower().strip()
     
-    ai_words = set([w[:-1] if w.endswith('s') and len(w)>3 else w for w in re.findall(r'[a-z0-9]+', ai_orig)])
-    tpl_words = set([w[:-1] if w.endswith('s') and len(w)>3 else w for w in re.findall(r'[a-z0-9]+', tpl_orig)])
-    
-    if not ai_words or not tpl_words: return False
+    # PROHIBIMOS cruces con componentes secundarios (1.0kW, Burners, etc.)
+    if any(x in tpl for x in ["sensor", "actuator", "valve", "switch", "fault", "enable", "status", "mains", "burner", "wheel", "battery", "heater"]):
+        if "pump" in tpl and "pump" not in ai: return False
+        if "pump" in tpl and "pump" in ai: pass
+        else: return False
 
-    if ai_orig == tpl_orig: return True
-    if ai_words == tpl_words: return True
-    if ai_words.issubset(tpl_words) or tpl_words.issubset(ai_words): return True
+    if "common lphw" in ai and ("common lphw" in tpl or "common chw" in tpl): return True
+    if "boiler" in ai and tpl == "boiler": return True
     
-    if "ahu" in ai_words and "air" in tpl_words and "handling" in tpl_words: return True
-    if "ahu" in tpl_words and "air" in ai_words and "handling" in ai_words: return True
-    if "fcu" in ai_words and "fan" in tpl_words and "coil" in tpl_words: return True
-    if "fcu" in tpl_words and "fan" in ai_words and "coil" in ai_words: return True
-    if "chiller" in ai_words and "chiller" in tpl_words: return True
-    if "pump" in ai_words and "pump" in tpl_words: return True
-    if "tank" in ai_words and "tank" in tpl_words: return True
+    if "pump" in ai and "pump" in tpl:
+        if "recovery" not in tpl: return True
+            
+    if "pressurisation" in ai and "pressurisation unit" in tpl: return True
+    if "calorifier" in ai and (tpl == "calorifier" or tpl.startswith("hot water generator")): return True
+    if "ahu" in ai and (tpl == "ahu" or tpl == "air handling units" or tpl == "air handling unit"): return True
+    if "fcu" in ai and (tpl == "fcu" or "fan coil" in tpl): return True
+    if "tank" in ai and "tank" in tpl: return True
+    if "chiller" in ai and (tpl == "chiller" or tpl == "chillers"): return True
+    if "extract fan" in ai and "extract fan" in tpl: return True
+    if "metering" in ai and "metering" in tpl: return True
     
-    if "extract" in ai_words and "fan" in ai_words and "extract" in tpl_words and "fan" in tpl_words: 
-        return True
-    
-    if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.70:
-        return True
     return False
 
 def fuzzy_match_strict(ai_str, tpl_str):
@@ -166,21 +165,16 @@ def fuzzy_match_strict(ai_str, tpl_str):
     if ai_words == tpl_words: return True
     if ai_words.issubset(tpl_words): return True
     
-    # Candado anti-cruces
+    # CANDADO ANTI-CRUCES
     critical_keywords = ["immersion", "air", "water", "duct", "room", "space", "supply", "return", "extract", "flow", "pressure", "valve", "actuator"]
     for word in critical_keywords:
-        if word in ai_words and word not in tpl_words:
-            return False
-        if word in tpl_words and word not in ai_words:
-            return False
+        if word in ai_words and word not in tpl_words: return False
+        if word in tpl_words and word not in ai_words: return False
             
-    if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.85:
-        return True
-        
+    if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.85: return True
     return False
 
 def get_catalog_data(desc):
-    # Buscador estricto en catálogo para pre-llenar los huérfanos con dinero
     for k, v in component_catalog.items():
         if fuzzy_match_strict(desc, k) or desc.strip().lower() == k.lower():
             return v
@@ -204,14 +198,13 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
 
     if not es_io_schedule:
         req_row = ws.max_row
-        green_row_idx = ws.max_row
-        
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
             if val in ["BMS Requirements", "Summary"]:
                 req_row = r - 2 if (r - 2) > start_row else r
                 break
                 
+        green_row_idx = req_row
         for r in range(start_row, req_row):
             fill = ws.cell(row=r, column=2).fill
             if fill and fill.fgColor and fill.fgColor.type == 'indexed' and fill.fgColor.indexed == 42:
@@ -238,7 +231,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if current_ai_parent:
                     current_ai_parent["children"].append(item)
 
-        # Mapeo Padres
         for group in ai_groups:
             ai_p_desc = group["parent"].get("Description", "")
             for r in range(start_row, req_row):
@@ -256,7 +248,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         
         for i, group in enumerate(matched_groups):
             best_match_row = group["best_match_row"]
-            # REGLA DESBLOQUEADA: Busca en todo el bloque hasta el siguiente equipo sin detenerse por sub-secciones
             next_boundary = matched_groups[i+1]["best_match_row"] if i + 1 < len(matched_groups) else green_row_idx
             
             p_item = group["parent"]
@@ -300,12 +291,8 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             if not group.get("best_match_row"):
                 orphans_to_insert.append({"parent": group["parent"], "children": group["children"], "is_partial": False})
 
-        # --- RESCATE DE HUÉRFANOS ---
         if orphans_to_insert:
-            total_insert = 0
-            for org in orphans_to_insert:
-                total_insert += 1 
-                total_insert += len(org["children"])
+            total_insert = sum(1 + len(org["children"]) for org in orphans_to_insert)
                 
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
@@ -358,7 +345,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # I/O SCHEDULE
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True

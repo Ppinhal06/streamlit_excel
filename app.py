@@ -27,9 +27,9 @@ with st.sidebar:
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 
-# 2. Base de Conocimiento Expandida
+# 2. Base de Conocimiento
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {
         "mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]
@@ -47,7 +47,7 @@ engineering_rules = {
         "per_unit": ["Enable", "Common Fault", "Control Signal", "Immersion Temperature Sensor", "High Limit Thermostat (60-95 Man. Reset)"]
     },
     "AHU (Air Handling Unit)": {
-        "per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temperature Sensor", "Extract Air Temperature Sensor", "Manual Reset Duct Frost Stat"]
+        "per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temp Sensor", "Return Air Temp Sensor", "Frost Stat"]
     },
     "FCU (Fan Coil Unit)": {
         "per_unit": ["Space Temperature Sensor", "Control Valve Actuator"]
@@ -56,10 +56,10 @@ engineering_rules = {
         "per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]
     },
     "Chiller": {
-        "per_unit": ["Chiller Enable and Status", "Chiller Flow Switch", "Chiller Flow Immersion Temperature Sensor", "Chiller Return Immersion Temperature Sensor"]
+        "per_unit": ["Chiller Enable", "Chiller Status", "Chiller Flow Switch", "Chiller Flow Temp Sensor", "Chiller Return Temp Sensor"]
     },
     "Extract Fan": {
-        "per_unit": ["Enable and Current Switch"]
+        "per_unit": ["Fan Enable", "Fan Current Switch"]
     },
     "Metering": {
         "mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]
@@ -92,9 +92,9 @@ component_catalog = {
     "High Limit Thermostat (60-95 Man. Reset)": {"Part": "RAK TW 1000B", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Space Temperature Sensor": {"Part": "RS-Temp", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Control Valve Actuator": {"Part": "MVC / DB_VZ", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
-    "Supply Air Temperature Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Extract Air Temperature Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Manual Reset Duct Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Supply Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Return Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Tank Low Low Level Status": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Tank Section 1 Low Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Tank Section 1 High Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
@@ -103,48 +103,60 @@ component_catalog = {
     "Tank Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Solenoid Valve 40mm": {"Part": "Solenoid Valve 40mm / ZS50", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Ultrasonic Level Transmitter": {"Part": "LS-MC", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Enable and Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Chiller Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Chiller Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Enable and Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Flow Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Return Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Fan Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
+    "Fan Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Gas Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Water Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
+
+# --- COMPARADOR LINEAL INTELIGENTE (Traductor de Nomenclatura) ---
+def buscar_fila_para_inyectar(item_ai, ws, start_row, end_row):
+    ai_desc = str(item_ai.get("Description", "")).strip().lower()
+    
+    # Normalizar diccionarios (traducir lo que la IA dice a lo que el Template dice)
+    ai_desc = ai_desc.replace("temp sensor", "temperature sensor")
+    ai_desc = ai_desc.replace("return air", "extract air")
+    ai_desc = ai_desc.replace("pump", "pumps").replace("pumpss", "pumps")
+    
+    # 1. Búsqueda de Coincidencia 100% Exacta (Ideal para "Enable", "Status")
+    for r in range(start_row, end_row):
+        tpl_desc = str(ws.cell(row=r, column=2).value or "").strip().lower()
+        if tpl_desc == ai_desc:
+            # Revisar que no hayamos inyectado ya aquí (Quantity o Puntos)
+            if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
+                return r
+
+    # 2. Búsqueda de Subconjunto de Palabras Clave (Ideal para Sensores Largos)
+    ai_words = set(re.findall(r'[a-z0-9]+', ai_desc))
+    
+    if len(ai_words) > 2: # No queremos meter "Enable" en "Pump Enable"
+        for r in range(start_row, end_row):
+            tpl_desc = str(ws.cell(row=r, column=2).value or "").strip().lower()
+            if not tpl_desc: continue
+                
+            tpl_words = set(re.findall(r'[a-z0-9]+', tpl_desc))
+            
+            if ai_words.issubset(tpl_words) or tpl_words.issubset(ai_words):
+                if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
+                    return r
+                    
+            if SequenceMatcher(None, ai_desc, tpl_desc).ratio() > 0.82:
+                if not ws.cell(row=r, column=8).value and not ws.cell(row=r, column=3).value:
+                    return r
+                    
+    return None
 
 def tiene_puntos(row):
     for io_type in ["AI", "AO", "DI", "DO"]:
         val = str(row.get(io_type, "")).strip()
         if val and val.replace('.', '', 1).isdigit() and float(val) > 0:
             return True
-    return False
-
-# --- MOTOR DE BÚSQUEDA FORENSE ESTRICTO ---
-def fuzzy_match_strict(ai_str, tpl_str):
-    ai_orig = str(ai_str).strip().lower().replace("temp ", "temperature ")
-    tpl_orig = str(tpl_str).strip().lower().replace("temp ", "temperature ")
-    
-    ai_words = set(re.findall(r'[a-z0-9]+', ai_orig))
-    tpl_words = set(re.findall(r'[a-z0-9]+', tpl_orig))
-    
-    if not ai_words or not tpl_words: return False
-
-    # Regla estricta para palabras cortas ("Enable", "Status")
-    if len(ai_words) <= 2:
-        if ai_orig == tpl_orig: return True
-        if ai_words == tpl_words: return True
-        if len(tpl_words) <= 3 and ai_words.issubset(tpl_words): return True
-        return False
-        
-    # Coincidencia directa
-    if ai_words == tpl_words: return True
-    if ai_words.issubset(tpl_words): return True
-    
-    # Coincidencia difusa solo si es muy alta (>80%) para evitar que "Return Air" pise a "Supply Air"
-    if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.85:
-        return True
-        
     return False
 
 # --- FUNCIÓN MAESTRA ---
@@ -172,64 +184,30 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 req_row = r
                 break
                 
-        # 1. Limpiador de basura de fábrica (Borra los '1s' duros de tanques vacíos)
+        # 1. Limpiar los ceros de fábrica
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
                 ws.cell(row=r, column=c).value = None 
 
-        ai_groups = []
-        current_ai_parent = None
+        # 2. Inyección Lineal. Tomamos cada elemento de la IA y buscamos su lugar perfecto.
         for item in datos:
-            desc = str(item.get("Description", "")).strip()
-            part = str(item.get("Part No.", "")).strip()
-            
-            if desc and not part and not tiene_puntos(item):
-                current_ai_parent = {"parent": item, "children": []}
-                ai_groups.append(current_ai_parent)
-            else:
-                if current_ai_parent:
-                    current_ai_parent["children"].append(item)
+            # Si el elemento no tiene cantidad ni puntos, no inyectamos nada
+            if not str(item.get("Quantity", "")).strip() and not tiene_puntos(item):
+                continue
 
-        # 3. Buscar inyección estricta
-        for group in ai_groups:
-            p_item = group["parent"]
-            ai_p_desc = p_item.get("Description", "")
+            fila_destino = buscar_fila_para_inyectar(item, ws, start_row, req_row)
             
-            best_match_row = None
-            for r in range(start_row, req_row):
-                desc_cell = ws.cell(row=r, column=2).value
-                part_cell = ws.cell(row=r, column=9).value
-                
-                if desc_cell and not part_cell:
-                    if fuzzy_match_strict(ai_p_desc, desc_cell):
-                        if not ws.cell(row=r, column=8).value:
-                            best_match_row = r
-                            break
-                            
-            if best_match_row:
-                ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
-                ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
-                
-                for child in group["children"]:
-                    ai_c_desc = child.get("Description", "")
-                    
-                    # Busca solo en los hijos inmediatos de ese equipo para no invadir otras secciones
-                    for cr in range(best_match_row + 1, req_row):
-                        c_desc = ws.cell(row=cr, column=2).value
-                        c_part = ws.cell(row=cr, column=9).value
-                        
-                        if c_desc and not c_part:
-                            break 
-                            
-                        if c_desc:
-                            if fuzzy_match_strict(ai_c_desc, c_desc):
-                                if child.get("AI"): ws.cell(row=cr, column=3).value = child.get("AI")
-                                if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
-                                if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
-                                if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
-                                if child.get("Labour At 20%"): ws.cell(row=cr, column=12).value = child.get("Labour At 20%")
-                                break 
+            if fila_destino:
+                if item.get("Quantity"): ws.cell(row=fila_destino, column=8).value = item.get("Quantity")
+                if item.get("MCC"): ws.cell(row=fila_destino, column=7).value = item.get("MCC")
+                if item.get("AI"): ws.cell(row=fila_destino, column=3).value = item.get("AI")
+                if item.get("AO"): ws.cell(row=fila_destino, column=4).value = item.get("AO")
+                if item.get("DI"): ws.cell(row=fila_destino, column=5).value = item.get("DI")
+                if item.get("DO"): ws.cell(row=fila_destino, column=6).value = item.get("DO")
+                if item.get("Labour At 20%"): ws.cell(row=fila_destino, column=12).value = item.get("Labour At 20%")
+
     else:
+        # LÓGICA I/O SCHEDULE (Como siempre ha funcionado)
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True

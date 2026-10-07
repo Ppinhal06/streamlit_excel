@@ -152,10 +152,12 @@ def actualizar_formulas(ws, green_idx, total_insert):
     def replacer(match):
         col = match.group(1)
         row_num = int(match.group(2))
+        
         if row_num >= green_idx:
             return f"{col}{row_num + total_insert}"
         if row_num == green_idx - 1:
             return f"{col}{row_num + total_insert}"
+            
         return match.group(0)
 
     for r in range(1, ws.max_row + 1):
@@ -248,6 +250,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         for item in datos:
             desc = str(item.get("Description", "")).strip()
             part = str(item.get("Part No.", "")).strip()
+            
             if desc and not part and not tiene_puntos(item):
                 current_ai_parent = {"parent": item, "children": [], "best_match_row": None}
                 ai_groups.append(current_ai_parent)
@@ -260,6 +263,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             for r in range(start_row, req_row):
                 desc_cell = ws.cell(row=r, column=2).value
                 part_cell = ws.cell(row=r, column=9).value
+                
                 if desc_cell and not part_cell:
                     if fuzzy_match_parent(ai_p_desc, desc_cell):
                         if not any(g.get("best_match_row") == r for g in ai_groups):
@@ -329,6 +333,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
 
         if orphans_to_insert:
             total_insert = sum(1 + len(org["children"]) for org in orphans_to_insert)
+                
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
                 actualizar_formulas(ws, green_row_idx, total_insert)
@@ -377,10 +382,16 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # === I/O SCHEDULE: LISTA JERÁRQUICA CON COLUMNA EXTRA DE CANTIDAD ===
-        # Respetamos el formato visual clásico que te gusta, pero inyectamos la cantidad total de cada piececita a la derecha de "Part No." (Columna 10)
+        # === I/O SCHEDULE: BOM CONSOLIDADO (SIN REPETICIONES) CON COLUMNA DE CANTIDAD EXTRA ===
         
-        # Renombramos el encabezado de la columna J para I/O
+        # Limpiamos el área de trabajo
+        for r in range(start_row, ws.max_row + 1):
+            for c in range(2, 13):
+                cell = ws.cell(row=r, column=c)
+                if not isinstance(cell, MergedCell):
+                    cell.value = None
+        
+        # Renombramos el encabezado de la columna J (10) para I/O
         cell_j6 = ws.cell(row=6, column=10)
         if not isinstance(cell_j6, MergedCell):
             cell_j6.value = "Piece Qty"
@@ -388,36 +399,80 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             cell_j6.alignment = copy.copy(ws.cell(row=6, column=9).alignment)
             cell_j6.border = copy.copy(ws.cell(row=6, column=9).border)
 
-        current_p_qty = 1
-
-        for idx, row_data in enumerate(datos):
-            current_row = start_row + idx
-            desc = str(row_data.get("Description", "")).strip()
-            part = str(row_data.get("Part No.", "")).strip()
-            es_header = bool(desc) and not bool(part) and not tiene_puntos(row_data)
-
-            part_qty_final = ""
-            
-            if es_header:
-                qty_str = str(row_data.get("Quantity", "1")).strip()
-                current_p_qty = int(qty_str) if qty_str.isdigit() else 1
+        aggregated_io = {}
+        ai_groups_io = []
+        current_ai_parent_io = None
+        
+        for item in datos:
+            desc = str(item.get("Description", "")).strip()
+            part = str(item.get("Part No.", "")).strip()
+            if desc and not part and not tiene_puntos(item):
+                current_ai_parent_io = {"parent": item, "children": []}
+                ai_groups_io.append(current_ai_parent_io)
             else:
-                # Calculamos matemáticamente cuántas piezas hijas requiere esta línea
-                cat_item = get_catalog_data(desc)
-                b_ai = cat_item.get("AI", 0) if cat_item else 0
-                b_ao = cat_item.get("AO", 0) if cat_item else 0
-                b_di = cat_item.get("DI", 0) if cat_item else 0
-                b_do = cat_item.get("DO", 0) if cat_item else 0
-                
-                def get_val(val):
-                    v = str(val).strip()
-                    return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
-                
-                ai_tot = get_val(row_data.get("AI", 0))
-                ao_tot = get_val(row_data.get("AO", 0))
-                di_tot = get_val(row_data.get("DI", 0))
-                do_tot = get_val(row_data.get("DO", 0))
+                if current_ai_parent_io:
+                    current_ai_parent_io["children"].append(item)
 
+        for group in ai_groups_io:
+            p_item = group["parent"]
+            
+            qty_str = str(p_item.get("Quantity", "1")).strip()
+            p_qty = int(qty_str) if qty_str.isdigit() else 1
+            
+            for child in group["children"]:
+                desc = str(child.get("Description", "")).strip()
+                cat_item = get_catalog_data(desc)
+                part_no = str(child.get("Part No.", "")).strip()
+                if not part_no and cat_item:
+                    part_no = cat_item.get("Part", "")
+                
+                # AGRUPADOR: Toda pieza con el mismo número de parte colisiona en una sola línea
+                agg_key = part_no.strip().lower() if part_no.strip() else desc.strip().lower()
+                if not agg_key:
+                    continue
+                    
+                if agg_key not in aggregated_io:
+                    clean_desc = desc
+                    if part_no:
+                        if part_no.lower() == "volt free contacts":
+                            clean_desc = "Software/Relay Interfaces (Enable/Status/Fault)"
+                        elif part_no.lower() == "device by others":
+                            clean_desc = "3rd Party Device Interface"
+                        else:
+                            for k, v in component_catalog.items():
+                                if v.get("Part", "").strip().lower() == part_no.strip().lower():
+                                    clean_desc = k.replace("Boiler ", "").replace("Chiller ", "").replace("Header ", "").replace("Pump ", "")
+                                    break
+                    
+                    def get_val(val):
+                        v = str(val).strip()
+                        return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
+                        
+                    # Extraemos los puntos INDIVIDUALES por unidad
+                    base_ai = cat_item.get("AI", 0) if cat_item else (1 if get_val(child.get("AI", 0)) > 0 else 0)
+                    base_ao = cat_item.get("AO", 0) if cat_item else (1 if get_val(child.get("AO", 0)) > 0 else 0)
+                    base_di = cat_item.get("DI", 0) if cat_item else (1 if get_val(child.get("DI", 0)) > 0 else 0)
+                    base_do = cat_item.get("DO", 0) if cat_item else (1 if get_val(child.get("DO", 0)) > 0 else 0)
+                    base_labour = cat_item.get("Labour", 0) if cat_item else 0
+                                
+                    aggregated_io[agg_key] = {
+                        "Description": clean_desc,
+                        "Part No.": part_no,
+                        "Quantity": 0,
+                        "AI": base_ai, "AO": base_ao, "DI": base_di, "DO": base_do,
+                        "Labour_Base": base_labour
+                    }
+                
+                ai_tot = get_val(child.get("AI", 0))
+                ao_tot = get_val(child.get("AO", 0))
+                di_tot = get_val(child.get("DI", 0))
+                do_tot = get_val(child.get("DO", 0))
+                
+                b_ai = aggregated_io[agg_key]["AI"]
+                b_ao = aggregated_io[agg_key]["AO"]
+                b_di = aggregated_io[agg_key]["DI"]
+                b_do = aggregated_io[agg_key]["DO"]
+                
                 pieces = 0
                 if b_ai > 0: pieces = ai_tot // b_ai
                 elif b_ao > 0: pieces = ao_tot // b_ao
@@ -426,25 +481,53 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 
                 if pieces == 0:
                     pieces = max(ai_tot, ao_tot, di_tot, do_tot)
-                    if pieces == 0: pieces = current_p_qty
-                
-                part_qty_final = pieces
+                    if pieces == 0: pieces = p_qty
+                    
+                aggregated_io[agg_key]["Quantity"] += pieces
 
-                # Recuperamos el precio de Labour para que se imprima correctamente como en tu foto
-                part_no_final = str(row_data.get("Part No.", "")).strip()
-                if not part_no_final and cat_item:
-                    part_no_final = cat_item.get("Part", "")
-                
-                base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
-                row_data["Labour At 20%"] = base_labour * current_p_qty if base_labour > 0 else ""
-                row_data["Part No."] = part_no_final
+        datos_io_procesados = []
+        datos_io_procesados.append({
+            "Description": "Consolidated Bill of Materials (BOM)",
+            "Part No.": "", "Quantity": "", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "", "Piece_Qty": "", "Labour": ""
+        })
+        
+        sorted_keys = sorted(aggregated_io.keys(), key=lambda k: aggregated_io[k]["Description"])
+        
+        # INYECCIÓN FINAL DE BOM: Puntos individuales en I/O, Cantidad física agregada en Columna 10
+        for k in sorted_keys:
+            data = aggregated_io[k]
+            tot_qty = data["Quantity"]
+            base_labour = data["Labour_Base"]
+            calc_labour = (base_labour * tot_qty) if base_labour > 0 and tot_qty > 0 else ""
+            
+            datos_io_procesados.append({
+                "Description": data["Description"],
+                "Part No.": data["Part No."],
+                "Quantity": "", # Mantenemos la original 8 vacía como acordamos en BOM
+                "AI": data["AI"] if data["AI"] > 0 else "",
+                "AO": data["AO"] if data["AO"] > 0 else "",
+                "DI": data["DI"] if data["DI"] > 0 else "",
+                "DO": data["DO"] if data["DO"] > 0 else "",
+                "MCC": "",
+                "Piece_Qty": tot_qty if tot_qty > 0 else "",
+                "Labour": calc_labour
+            })
+
+        for idx, row_data in enumerate(datos_io_procesados):
+            current_row = start_row + idx
+            desc = str(row_data.get("Description", "")).strip()
+            part = str(row_data.get("Part No.", "")).strip()
+            es_header = bool(desc) and not bool(part) and not tiene_puntos(row_data)
 
             col_map = {
-                2: row_data.get("Description", ""), 3: row_data.get("AI", ""), 4: row_data.get("AO", ""),
-                5: row_data.get("DI", ""), 6: row_data.get("DO", ""), 7: row_data.get("MCC", ""),
-                8: row_data.get("Quantity", ""), 9: row_data.get("Part No.", ""), 
-                10: part_qty_final, # ¡AQUÍ ESTÁ LA NUEVA COLUMNA DE CANTIDAD!
-                11: row_data.get("Parts At 0%", ""), 12: row_data.get("Labour At 20%", "")
+                2: row_data.get("Description", ""), 
+                3: row_data.get("AI", ""), 4: row_data.get("AO", ""),
+                5: row_data.get("DI", ""), 6: row_data.get("DO", ""), 
+                7: row_data.get("MCC", ""),
+                8: row_data.get("Quantity", ""), 
+                9: row_data.get("Part No.", ""),
+                10: row_data.get("Piece_Qty", ""),
+                12: row_data.get("Labour", "")
             }
             
             for col_num, val in col_map.items():
@@ -454,10 +537,11 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         cell.value = val
                 except AttributeError:
                     pass
-                    
+            
             clonar_estilo_columna(ws, start_row, current_row, es_padre=es_header)
 
-        last_row = start_row + len(datos) - 1
+        # Borrado de celdas sobrantes
+        last_row = start_row + len(datos_io_procesados) - 1
         delete_start = last_row + 1
         ws.print_area = ""
         delete_amount = ws.max_row - delete_start + 1

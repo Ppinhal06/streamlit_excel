@@ -124,7 +124,6 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
     ai = str(ai_desc).lower()
     tpl = str(tpl_desc).lower().strip()
     
-    # CANDADO ABSOLUTO CONTRA FALSOS POSITIVOS (Para evitar 1.00kW y similares)
     if any(x in tpl for x in ["sensor", "actuator", "valve", "switch", "fault", "enable", "status", "mains", "burner", "wheel", "battery", "heater", "kw"]):
         if "pump" in tpl and "pump" not in ai: return False
         if "pump" in tpl and "pump" in ai: pass
@@ -143,10 +142,9 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
     if "tank" in ai and "tank" in tpl: return True
     if "chiller" in ai and (tpl == "chiller" or tpl == "chillers"): return True
     
-    # REGLA PARA EXTRACT FAN
     if "extract fan" in ai and "extract fan" in tpl: return True
-    
     if "metering" in ai and "metering" in tpl: return True
+    
     return False
 
 def fuzzy_match_strict(ai_str, tpl_str):
@@ -232,7 +230,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if current_ai_parent:
                     current_ai_parent["children"].append(item)
 
-        # 1. Encontrar a los padres
         for group in ai_groups:
             ai_p_desc = group["parent"].get("Description", "")
             for r in range(start_row, req_row):
@@ -254,17 +251,14 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             
             p_item = group["parent"]
             ai_p_desc = p_item.get("Description", "")
+            qty_str = str(p_item.get("Quantity", "1")).strip()
+            parent_qty = int(qty_str) if qty_str.isdigit() else 1
             
-            # --- LIMPIEZA DE NOMBRES FEOS ---
-            # Sobreescribimos nombres feos de la plantilla con el nombre limpio de la IA
+            # 1. LIMPIEZA DE NOMBRES FEOS: Sobreescribe los títulos sucios de la plantilla (Ej. Extract Fans)
             ws.cell(row=best_match_row, column=2).value = ai_p_desc
             
             ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
             ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
-            
-            # Cantidad del Padre para multiplicar precios en Python
-            qty_val = str(p_item.get("Quantity", "1")).strip()
-            parent_qty = int(qty_val) if qty_val.isdigit() else 1
             
             missing_children = []
             for child in group["children"]:
@@ -281,14 +275,16 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                 if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
                                 if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
                                 
-                                # --- CÁLCULO MATEMÁTICO BLINDADO EN PYTHON ---
+                                # 2. CALCULO MATEMATICO SEGURO PARA EL EXCEL PRINCIPAL
                                 cat_item = get_catalog_data(ai_c_desc)
-                                part_no = cat_item.get("Part", "") if cat_item else ""
+                                part_no = child.get("Part No.", "")
+                                if not part_no and cat_item: part_no = cat_item.get("Part", "")
+                                
                                 base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
-                                calc_labour = base_labour * parent_qty
+                                calc_labour = base_labour * parent_qty if base_labour > 0 else ""
                                 
                                 if part_no: ws.cell(row=cr, column=9).value = part_no
-                                if calc_labour > 0: ws.cell(row=cr, column=12).value = calc_labour
+                                if calc_labour: ws.cell(row=cr, column=12).value = calc_labour
                                 
                                 child_matched = True
                                 break 
@@ -303,7 +299,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             if not group.get("best_match_row"):
                 orphans_to_insert.append({"parent": group["parent"], "children": group["children"], "is_partial": False})
 
-        # --- RESCATE DE HUÉRFANOS ---
         if orphans_to_insert:
             total_insert = sum(1 + len(org["children"]) for org in orphans_to_insert)
                 
@@ -323,12 +318,10 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     p_item = org["parent"]
                     titulo = p_item.get("Description", "")
                     
+                    qty_str = str(p_item.get("Quantity", "1")).strip()
+                    parent_qty = int(qty_str) if qty_str.isdigit() else 1
+                    
                     ws.cell(row=current_insert_row, column=2, value=titulo)
-                    
-                    # Extraer cantidad para el multiplicador de huérfanos
-                    qty_val = str(p_item.get("Quantity", "1")).strip()
-                    parent_qty = int(qty_val) if qty_val.isdigit() else 1
-                    
                     if not org["is_partial"]:
                         ws.cell(row=current_insert_row, column=7, value=p_item.get("MCC", ""))
                         ws.cell(row=current_insert_row, column=8, value=p_item.get("Quantity", ""))
@@ -347,14 +340,16 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
                         ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
                         
-                        # --- CÁLCULO MATEMÁTICO BLINDADO EN PYTHON ---
+                        # 3. CALCULO MATEMATICO SEGURO PARA HUERFANOS
                         cat_item = get_catalog_data(ai_c_desc)
-                        part_no = cat_item.get("Part", "") if cat_item else ""
+                        part_no = child.get("Part No.", "")
+                        if not part_no and cat_item: part_no = cat_item.get("Part", "")
+                        
                         base_labour = int(cat_item.get("Labour", 0)) if cat_item else 0
-                        calc_labour = base_labour * parent_qty
+                        calc_labour = base_labour * parent_qty if base_labour > 0 else ""
                         
                         if part_no: ws.cell(row=current_insert_row, column=9).value = part_no
-                        if calc_labour > 0: ws.cell(row=current_insert_row, column=12).value = calc_labour
+                        if calc_labour: ws.cell(row=current_insert_row, column=12).value = calc_labour
                         
                         for c in range(2, 13):
                             ws.cell(row=current_insert_row, column=c).font = fuente_item
@@ -363,7 +358,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # I/O SCHEDULE INTACTO
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True
@@ -448,7 +442,6 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- FILTRO ANTI-CEROS ---
                 for item in materials_data:
                     for key, val in item.items():
                         if val == 0 or val == "0" or val == "0.0":

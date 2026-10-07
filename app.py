@@ -141,7 +141,6 @@ def fuzzy_match_parent(ai_str, tpl_str):
     if "pump" in ai_words and "pump" in tpl_words: return True
     if "tank" in ai_words and "tank" in tpl_words: return True
     
-    # REGLA ESPECIAL PARA EXTRACT FAN
     if "extract" in ai_words and "fan" in ai_words and "extract" in tpl_words and "fan" in tpl_words: 
         return True
     
@@ -169,7 +168,6 @@ def fuzzy_match_strict(ai_str, tpl_str):
     
     if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.85:
         return True
-        
     return False
 
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
@@ -189,15 +187,23 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     start_row = 7 
 
     if not es_io_schedule:
-        # Detectar el verdadero fondo para inyectar huérfanos sin romper la línea verde
         req_row = ws.max_row
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
             if val in ["BMS Requirements", "Summary"]:
-                # Insertamos un par de filas arriba para no tocar el borde superior del resumen
-                req_row = r - 2 if (r - 2) > start_row else r
+                req_row = r
                 break
                 
+        # Detección exacta de la frontera verde para los huérfanos
+        green_row_idx = req_row
+        for r in range(start_row, req_row):
+            fill = ws.cell(row=r, column=2).fill
+            # La franja verde gruesa típica de tu plantilla
+            if fill and fill.fgColor and fill.fgColor.type == 'indexed' and fill.fgColor.indexed == 42:
+                green_row_idx = r
+                break
+                
+        # Limpiar cantidades preexistentes
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
                 ws.cell(row=r, column=c).value = None 
@@ -209,67 +215,70 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             part = str(item.get("Part No.", "")).strip()
             
             if desc and not part and not tiene_puntos(item):
-                current_ai_parent = {"parent": item, "children": []}
+                current_ai_parent = {"parent": item, "children": [], "best_match_row": None}
                 ai_groups.append(current_ai_parent)
             else:
                 if current_ai_parent:
                     current_ai_parent["children"].append(item)
 
-        orphans_to_insert = []
-
+        # 1. Encontrar las posiciones de todos los padres que sí existen en la plantilla
         for group in ai_groups:
-            p_item = group["parent"]
-            ai_p_desc = p_item.get("Description", "")
-            
-            best_match_row = None
+            ai_p_desc = group["parent"].get("Description", "")
             for r in range(start_row, req_row):
                 desc_cell = ws.cell(row=r, column=2).value
                 part_cell = ws.cell(row=r, column=9).value
                 
                 if desc_cell and not part_cell:
                     if fuzzy_match_parent(ai_p_desc, desc_cell):
-                        if not ws.cell(row=r, column=8).value:
-                            best_match_row = r
+                        # Que ningún otro grupo lo haya reclamado ya
+                        if not any(g.get("best_match_row") == r for g in ai_groups):
+                            group["best_match_row"] = r
                             break
-                            
-            if best_match_row:
-                ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
-                ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
-                
-                missing_children = []
-                for child in group["children"]:
-                    ai_c_desc = child.get("Description", "")
-                    child_matched = False
-                    
-                    for cr in range(best_match_row + 1, req_row):
-                        c_desc = ws.cell(row=cr, column=2).value
-                        c_part = ws.cell(row=cr, column=9).value
-                        
-                        if c_desc and not c_part:
-                            break 
-                            
-                        if c_desc:
-                            if fuzzy_match_strict(ai_c_desc, c_desc):
-                                if not ws.cell(row=cr, column=3).value and not ws.cell(row=cr, column=6).value:
-                                    if child.get("AI"): ws.cell(row=cr, column=3).value = child.get("AI")
-                                    if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
-                                    if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
-                                    if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
-                                    if child.get("Part No."): ws.cell(row=cr, column=9).value = child.get("Part No.")
-                                    if child.get("Labour At 20%"): ws.cell(row=cr, column=12).value = child.get("Labour At 20%")
-                                    child_matched = True
-                                    break 
-                                    
-                    if not child_matched:
-                        missing_children.append(child)
-                        
-                if missing_children:
-                    # Si ya estaba el padre, no lo marcamos como "Adicional" para mantenerlo limpio
-                    orphans_to_insert.append({"parent": p_item, "children": missing_children, "is_partial": False})
-            else:
-                orphans_to_insert.append({"parent": p_item, "children": group["children"], "is_partial": False})
 
-        # --- RESCATE ESTÉTICO ---
+        # 2. Mapear hijos dentro de fronteras exactas (Para que AHU no se corte a la mitad)
+        matched_groups = sorted([g for g in ai_groups if g["best_match_row"]], key=lambda x: x["best_match_row"])
+        orphans_to_insert = []
+        
+        for i, group in enumerate(matched_groups):
+            best_match_row = group["best_match_row"]
+            # El límite de búsqueda es donde empieza el siguiente equipo, o la franja verde
+            next_boundary = matched_groups[i+1]["best_match_row"] if i + 1 < len(matched_groups) else green_row_idx
+            
+            p_item = group["parent"]
+            ws.cell(row=best_match_row, column=7).value = p_item.get("MCC", "")
+            ws.cell(row=best_match_row, column=8).value = p_item.get("Quantity", "")
+            
+            missing_children = []
+            for child in group["children"]:
+                ai_c_desc = child.get("Description", "")
+                child_matched = False
+                
+                for cr in range(best_match_row + 1, next_boundary):
+                    c_desc = ws.cell(row=cr, column=2).value
+                    if c_desc:
+                        if fuzzy_match_strict(ai_c_desc, c_desc):
+                            if not ws.cell(row=cr, column=3).value and not ws.cell(row=cr, column=6).value:
+                                if child.get("AI"): ws.cell(row=cr, column=3).value = child.get("AI")
+                                if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
+                                if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
+                                if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
+                                if child.get("Part No."): ws.cell(row=cr, column=9).value = child.get("Part No.")
+                                if child.get("Labour At 20%"): ws.cell(row=cr, column=12).value = child.get("Labour At 20%")
+                                child_matched = True
+                                break 
+                                
+                if not child_matched:
+                    missing_children.append(child)
+                    
+            if missing_children:
+                orphans_to_insert.append({"parent": p_item, "children": missing_children, "is_partial": True})
+                
+        # 3. Equipos enteros que no existían en la plantilla (Ej. FCUs)
+        for group in ai_groups:
+            if not group.get("best_match_row"):
+                orphans_to_insert.append({"parent": group["parent"], "children": group["children"], "is_partial": False})
+
+        # --- RESCATE ESTÉTICO (Justo arriba de la franja verde) ---
         if orphans_to_insert:
             total_insert = 0
             for org in orphans_to_insert:
@@ -277,7 +286,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 total_insert += len(org["children"])
                 
             if total_insert > 0:
-                ws.insert_rows(req_row, total_insert)
+                ws.insert_rows(green_row_idx, total_insert)
                 
                 fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
                 fuente_header = copy.copy(fuente_base)
@@ -287,14 +296,13 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 borde_base = copy.copy(ws.cell(row=start_row, column=2).border)
                 alineacion_base = copy.copy(ws.cell(row=start_row, column=2).alignment)
                 
-                current_insert_row = req_row
+                current_insert_row = green_row_idx
                 for org in orphans_to_insert:
                     p_item = org["parent"]
-                    # Nombres limpios, sin "(Additional Components)"
+                    # Nombre pulcro, idéntico al catálogo. 
                     titulo = p_item.get("Description", "")
                     
                     ws.cell(row=current_insert_row, column=2, value=titulo)
-                    # El padre inyectado solo lleva cantidad si es el bloque principal
                     if not org["is_partial"]:
                         ws.cell(row=current_insert_row, column=7, value=p_item.get("MCC", ""))
                         ws.cell(row=current_insert_row, column=8, value=p_item.get("Quantity", ""))
@@ -312,7 +320,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
                         ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
                         
-                        # AQUÍ INYECTAMOS PRECIO Y NÚMERO DE PARTE PARA QUE SE COTICE
+                        # INYECCIÓN DE PRECIOS PARA ORFANATOS
                         ws.cell(row=current_insert_row, column=9, value=child.get("Part No.", ""))
                         ws.cell(row=current_insert_row, column=12, value=child.get("Labour At 20%", ""))
                         
@@ -323,7 +331,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # I/O SCHEDULE
+        # I/O SCHEDULE (Intacto y Perfecto)
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True
@@ -394,7 +402,7 @@ if st.button("Generate Points List"):
             {json.dumps(component_catalog, indent=2)}
             
             CRITICAL FORMATTING INSTRUCTIONS:
-            1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description" (e.g. "Extract Fan"). DO NOT INVENT NAMES.
+            1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description" (e.g. "AHU (Air Handling Unit)"). DO NOT INVENT NAMES.
             2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES.
             3. CRITICAL RULE: For components (child rows), "Quantity" and "MCC" MUST be left completely blank ("").
             4. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI).
@@ -411,6 +419,7 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
+                # --- FILTRO ANTI-CEROS DE SEGURIDAD EXTREMA ---
                 for item in materials_data:
                     for key, val in item.items():
                         if val == 0 or val == "0" or val == "0.0":

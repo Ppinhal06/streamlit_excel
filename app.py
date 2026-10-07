@@ -88,13 +88,6 @@ component_catalog = {
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
-def tiene_puntos(row):
-    for io_type in ["AI", "AO", "DI", "DO"]:
-        val = str(row.get(io_type, "")).strip()
-        if val and val.replace('.', '', 1).isdigit() and float(val) > 0:
-            return True
-    return False
-
 def fuzzy_match_parent(ai_desc, tpl_desc):
     ai = str(ai_desc).lower()
     tpl = str(tpl_desc).lower().strip()
@@ -148,6 +141,16 @@ def get_catalog_data(desc):
             return v
     return {}
 
+# DETECTOR ANTI-ERRORES: Sabe qué es padre y qué es hijo, incluso si la IA olvida datos.
+def is_parent(item):
+    desc = str(item.get("Description", "")).strip()
+    part = str(item.get("Part No.", "")).strip()
+    if part: return False
+    if any(str(item.get(io_type, "")).strip().replace('.', '', 1).isdigit() for io_type in ["AI", "AO", "DI", "DO"]):
+        return False
+    if get_catalog_data(desc): return False
+    return True
+
 def actualizar_formulas(ws, green_idx, total_insert):
     def replacer(match):
         col = match.group(1)
@@ -182,7 +185,6 @@ def reparar_celdas_combinadas(ws, green_idx, total_insert):
     for mcr in new_merged:
         ws.merged_cells.add(mcr)
 
-# CLONADOR CON PARCHE MAESTRO PARA LETRAS ENANAS
 def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
     for c in range(1, 15):
         try:
@@ -191,8 +193,7 @@ def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
             
             if isinstance(target_cell, MergedCell) or isinstance(source_cell, MergedCell):
                 continue
-            
-            # EL PARCHE: Si es la columna 8 (Quantity), clonamos la fuente de la columna 9 para evadir la letra "Small" nativa de Excel
+                
             if c == 8:
                 fuente = copy.copy(ws.cell(row=source_row, column=9).font)
             else:
@@ -251,10 +252,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         ai_groups = []
         current_ai_parent = None
         for item in datos:
-            desc = str(item.get("Description", "")).strip()
-            part = str(item.get("Part No.", "")).strip()
-            
-            if desc and not part and not tiene_puntos(item):
+            if is_parent(item):
                 current_ai_parent = {"parent": item, "children": [], "best_match_row": None}
                 ai_groups.append(current_ai_parent)
             else:
@@ -385,7 +383,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # === I/O SCHEDULE: BOM ===
         for r in range(start_row, ws.max_row + 1):
             for c in range(2, 13):
                 cell = ws.cell(row=r, column=c)
@@ -397,9 +394,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         current_ai_parent_io = None
         
         for item in datos:
-            desc = str(item.get("Description", "")).strip()
-            part = str(item.get("Part No.", "")).strip()
-            if desc and not part and not tiene_puntos(item):
+            if is_parent(item):
                 current_ai_parent_io = {"parent": item, "children": []}
                 ai_groups_io.append(current_ai_parent_io)
             else:
@@ -408,7 +403,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
 
         for group in ai_groups_io:
             p_item = group["parent"]
-            
             qty_str = str(p_item.get("Quantity", "1")).strip()
             p_qty = int(qty_str) if qty_str.isdigit() else 1
             
@@ -453,6 +447,10 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         "AI": base_ai, "AO": base_ao, "DI": base_di, "DO": base_do,
                         "Labour_Base": base_labour
                     }
+                
+                def get_val(val):
+                    v = str(val).strip()
+                    return int(float(v)) if v.replace('.', '', 1).isdigit() else 0
                 
                 ai_tot = get_val(child.get("AI", 0))
                 ao_tot = get_val(child.get("AO", 0))
@@ -506,7 +504,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             current_row = start_row + idx
             desc = str(row_data.get("Description", "")).strip()
             part = str(row_data.get("Part No.", "")).strip()
-            es_header = bool(desc) and not bool(part) and not tiene_puntos(row_data)
+            es_header = bool(desc) and not bool(part) and not any(str(row_data.get(x, "")).strip() for x in ["AI", "AO", "DI", "DO"])
 
             col_map = {
                 2: row_data.get("Description", ""), 
@@ -589,27 +587,7 @@ if st.button("Generate Points List"):
                             item[key] = ""
                 
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
-
-                datos_io = []
-                headers_pendientes = []
-                for row in materials_data:
-                    desc = str(row.get("Description", "")).strip()
-                    part = str(row.get("Part No.", "")).strip()
-                    qty = str(row.get("Quantity", "")).strip()
-                    
-                    es_header = bool(desc) and not bool(part) and not tiene_puntos(row)
-                    if es_header:
-                        if not qty:
-                            pass 
-                        else:
-                            headers_pendientes.append(row)
-                    elif tiene_puntos(row):
-                        for h in headers_pendientes:
-                            datos_io.append(h)
-                        headers_pendientes = [] 
-                        datos_io.append(row)
-
-                buffer_filtrado = crear_excel_formateado(datos_io, project_name, es_io_schedule=True)
+                buffer_filtrado = crear_excel_formateado(materials_data, project_name, es_io_schedule=True)
                 
                 st.session_state.generado = True
                 st.session_state.buffer_full = buffer_full

@@ -140,15 +140,17 @@ def fuzzy_match_parent(ai_str, tpl_str):
     if "chiller" in ai_words and "chiller" in tpl_words: return True
     if "pump" in ai_words and "pump" in tpl_words: return True
     if "tank" in ai_words and "tank" in tpl_words: return True
-    if "extract" in ai_words and "fan" in ai_words and "extract" in tpl_words and "fan" in tpl_words: return True
+    
+    if "extract" in ai_words and "fan" in ai_words and "extract" in tpl_words and "fan" in tpl_words: 
+        return True
     
     if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.70:
         return True
     return False
 
 def fuzzy_match_strict(ai_str, tpl_str):
-    ai_orig = str(ai_str).strip().lower().replace("temp ", "temperature ")
-    tpl_orig = str(tpl_str).strip().lower().replace("temp ", "temperature ")
+    ai_orig = str(ai_str).strip().lower().replace("temp ", "temperature ").replace("return air", "extract air")
+    tpl_orig = str(tpl_str).strip().lower().replace("temp ", "temperature ").replace("return air", "extract air")
     
     ai_words = set(re.findall(r'[a-z0-9]+', ai_orig))
     tpl_words = set(re.findall(r'[a-z0-9]+', tpl_orig))
@@ -164,9 +166,25 @@ def fuzzy_match_strict(ai_str, tpl_str):
     if ai_words == tpl_words: return True
     if ai_words.issubset(tpl_words): return True
     
+    # Candado anti-cruces
+    critical_keywords = ["immersion", "air", "water", "duct", "room", "space", "supply", "return", "extract", "flow", "pressure", "valve", "actuator"]
+    for word in critical_keywords:
+        if word in ai_words and word not in tpl_words:
+            return False
+        if word in tpl_words and word not in ai_words:
+            return False
+            
     if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.85:
         return True
+        
     return False
+
+def get_catalog_data(desc):
+    # Buscador estricto en catálogo para pre-llenar los huérfanos con dinero
+    for k, v in component_catalog.items():
+        if fuzzy_match_strict(desc, k) or desc.strip().lower() == k.lower():
+            return v
+    return {}
 
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
@@ -186,19 +204,22 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
 
     if not es_io_schedule:
         req_row = ws.max_row
+        green_row_idx = ws.max_row
+        
         for r in range(start_row, ws.max_row + 1):
             val = str(ws.cell(row=r, column=2).value).strip()
             if val in ["BMS Requirements", "Summary"]:
                 req_row = r - 2 if (r - 2) > start_row else r
                 break
                 
-        # Buscar la línea verde (Index 42)
-        green_row_idx = req_row
         for r in range(start_row, req_row):
             fill = ws.cell(row=r, column=2).fill
             if fill and fill.fgColor and fill.fgColor.type == 'indexed' and fill.fgColor.indexed == 42:
                 green_row_idx = r
                 break
+                
+        if green_row_idx == ws.max_row:
+            green_row_idx = req_row
                 
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
@@ -217,6 +238,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if current_ai_parent:
                     current_ai_parent["children"].append(item)
 
+        # Mapeo Padres
         for group in ai_groups:
             ai_p_desc = group["parent"].get("Description", "")
             for r in range(start_row, req_row):
@@ -234,7 +256,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         
         for i, group in enumerate(matched_groups):
             best_match_row = group["best_match_row"]
-            # Definir límite de búsqueda estricto sin usar "break" prematuro
+            # REGLA DESBLOQUEADA: Busca en todo el bloque hasta el siguiente equipo sin detenerse por sub-secciones
             next_boundary = matched_groups[i+1]["best_match_row"] if i + 1 < len(matched_groups) else green_row_idx
             
             p_item = group["parent"]
@@ -256,10 +278,9 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                                 if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
                                 if child.get("DO"): ws.cell(row=cr, column=6).value = child.get("DO")
                                 
-                                # Inyección Blindada de Precios
                                 part_no = child.get("Part No.", "")
                                 labour = child.get("Labour At 20%", "") or child.get("Labour", "")
-                                cat_item = component_catalog.get(ai_c_desc)
+                                cat_item = get_catalog_data(ai_c_desc)
                                 if not part_no and cat_item: part_no = cat_item.get("Part", "")
                                 if not labour and cat_item: labour = cat_item.get("Labour", "")
                                 
@@ -279,7 +300,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             if not group.get("best_match_row"):
                 orphans_to_insert.append({"parent": group["parent"], "children": group["children"], "is_partial": False})
 
-        # --- RESCATE ESTÉTICO (Justo arriba de la línea verde, con precios y sin sufijos feos) ---
+        # --- RESCATE DE HUÉRFANOS ---
         if orphans_to_insert:
             total_insert = 0
             for org in orphans_to_insert:
@@ -323,7 +344,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         
                         part_no = child.get("Part No.", "")
                         labour = child.get("Labour At 20%", "") or child.get("Labour", "")
-                        cat_item = component_catalog.get(ai_c_desc)
+                        cat_item = get_catalog_data(ai_c_desc)
                         if not part_no and cat_item: part_no = cat_item.get("Part", "")
                         if not labour and cat_item: labour = cat_item.get("Labour", "")
                         
@@ -337,6 +358,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
+        # I/O SCHEDULE
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True

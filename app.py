@@ -9,12 +9,9 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 
-# 1. UI Configuration & API
 st.set_page_config(page_title="BEMS Estimator Pro - DC Controls", layout="wide")
-
 st.title("Automated BEMS Points List & Estimator")
 st.markdown("---")
-st.markdown("Professional generator with dynamic Excel template injection.")
 
 if "generado" not in st.session_state:
     st.session_state.generado = False
@@ -23,13 +20,11 @@ with st.sidebar:
     st.header("System Configuration")
     api_key = st.text_input("Enter API Key (Gemini):", type="password")
     st.markdown("---")
-    st.info("✅ Standard DC Controls template is pre-loaded from the cloud server.")
 
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# 2. Base de Conocimiento
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {"mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
     "Boiler": {"per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]},
@@ -101,7 +96,6 @@ def tiene_puntos(row):
 def fuzzy_match_parent(ai_desc, tpl_desc):
     ai = str(ai_desc).lower()
     tpl = str(tpl_desc).lower().strip()
-    
     if any(x in tpl for x in ["sensor", "actuator", "valve", "switch", "fault", "enable", "status", "mains", "burner", "wheel", "battery", "heater", "kw"]):
         if "pump" in tpl and "pump" not in ai: return False
         if "pump" in tpl and "pump" in ai: pass
@@ -119,7 +113,6 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
     if "chiller" in ai and (tpl == "chiller" or tpl == "chillers"): return True
     if "extract fan" in ai and "extract fan" in tpl: return True
     if "metering" in ai and "metering" in tpl: return True
-    
     return False
 
 def fuzzy_match_strict(ai_str, tpl_str):
@@ -128,7 +121,6 @@ def fuzzy_match_strict(ai_str, tpl_str):
     
     ai_words = set(re.findall(r'[a-z0-9]+', ai_orig))
     tpl_words = set(re.findall(r'[a-z0-9]+', tpl_orig))
-    
     if not ai_words or not tpl_words: return False
 
     if len(ai_words) <= 2:
@@ -154,21 +146,27 @@ def get_catalog_data(desc):
             return v
     return {}
 
-# --- ACTUALIZADOR MÁGICO DE FÓRMULAS ---
 def actualizar_formulas(ws, green_idx, total_insert):
     def replacer(match):
         col = match.group(1)
         row_num = int(match.group(2))
-        # Si la fórmula apuntaba a la línea verde, o antes (end of range), estírala.
-        if row_num == green_idx - 1 or row_num >= green_idx:
+        
+        # Si la fórmula apuntaba a la línea verde (o cualquier cosa debajo de ella), la bajamos
+        if row_num >= green_idx:
             return f"{col}{row_num + total_insert}"
-        return f"{col}{row_num}"
+        # Si la fórmula es el final de un rango (ej. =SUM(C2:C285) donde la línea verde es la 286), la estiramos para que atrape a los FCUs
+        if row_num == green_idx - 1:
+            return f"{col}{row_num + total_insert}"
+            
+        return match.group(0)
 
-    for r in range(green_idx + total_insert, ws.max_row + 1):
+    for r in range(1, ws.max_row + 1):
         for c in range(1, 15):
             cell = ws.cell(row=r, column=c)
             if isinstance(cell.value, str) and cell.value.startswith("="):
-                cell.value = re.sub(r'([A-Z]{1,2})([0-9]+)', replacer, cell.value)
+                new_formula = re.sub(r'([A-Z]{1,2})([0-9]+)', replacer, cell.value)
+                if cell.value != new_formula:
+                    cell.value = new_formula
 
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
@@ -204,7 +202,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
         if green_row_idx == ws.max_row:
             green_row_idx = req_row
                 
-        # Limpieza de IA cruda
+        # Limpieza estricta: NO se tocan las columnas 9, 10, 11, 12 para preservar precios nativos
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8]:
                 ws.cell(row=r, column=c).value = None 
@@ -244,7 +242,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             p_item = group["parent"]
             ai_p_desc = p_item.get("Description", "")
             
-            # Limpieza de Nombres FEOS
             tpl_name = str(ws.cell(row=best_match_row, column=2).value or "")
             if "XXXX" in tpl_name or "??" in tpl_name:
                 ws.cell(row=best_match_row, column=2).value = ai_p_desc
@@ -279,14 +276,13 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             if not group.get("best_match_row"):
                 orphans_to_insert.append({"parent": group["parent"], "children": group["children"], "is_partial": False})
 
-        # --- INYECCIÓN DE HUÉRFANOS (FCUs y similares) ---
         if orphans_to_insert:
             total_insert = sum(1 + len(org["children"]) for org in orphans_to_insert)
                 
             if total_insert > 0:
                 ws.insert_rows(green_row_idx, total_insert)
                 
-                # --- AQUÍ ESTIRAMOS LAS FÓRMULAS DE EXCEL ---
+                # LA MAGIA QUE REPARA LOS TOTALES (BMS REQUIREMENTS)
                 actualizar_formulas(ws, green_row_idx, total_insert)
                 
                 fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
@@ -301,6 +297,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 for org in orphans_to_insert:
                     p_item = org["parent"]
                     titulo = p_item.get("Description", "")
+                    
                     qty_str = str(p_item.get("Quantity", "1")).strip()
                     parent_qty = int(qty_str) if qty_str.isdigit() else 1
                     
@@ -323,7 +320,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         ws.cell(row=current_insert_row, column=5, value=child.get("DI", ""))
                         ws.cell(row=current_insert_row, column=6, value=child.get("DO", ""))
                         
-                        # INYECCIÓN PURA DE PRECIOS PARA HUÉRFANOS
+                        # INYECCIÓN FINAL DE PRECIOS PARA HUÉRFANOS
                         cat_item = get_catalog_data(ai_c_desc)
                         part_no = child.get("Part No.", "")
                         if not part_no and cat_item: part_no = cat_item.get("Part", "")
@@ -341,7 +338,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         current_insert_row += 1
 
     else:
-        # LÓGICA I/O SCHEDULE (Se mantiene impecable)
         fuente_base = copy.copy(ws.cell(row=start_row, column=2).font)
         fuente_header = copy.copy(fuente_base)
         fuente_header.bold = True
@@ -401,7 +397,7 @@ if st.button("Generate Points List"):
     if not api_key or not project_description:
         st.warning("Please ensure you have entered your API Key and provided a project description.")
     else:
-        with st.spinner("Engineering system points and recalculating template formulas..."):
+        with st.spinner("Engineering system points and intelligently routing to template..."):
             prompt = f"""
             You are an expert BEMS estimator working for DC Controls. Generate a Points List based on the description.
             
@@ -409,7 +405,7 @@ if st.button("Generate Points List"):
             {json.dumps(engineering_rules, indent=2)}
             
             CRITICAL FORMATTING INSTRUCTIONS:
-            1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description".
+            1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description" (e.g. "AHU (Air Handling Unit)"). DO NOT INVENT NAMES.
             2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES.
             3. CRITICAL RULE: For components (child rows), "Quantity" and "MCC" MUST be left completely blank ("").
             4. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI).
@@ -426,7 +422,6 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 materials_data = json.loads(json_text)
                 
-                # --- FILTRO ANTI-CEROS ---
                 for item in materials_data:
                     for key, val in item.items():
                         if val == 0 or val == "0" or val == "0.0":
@@ -469,6 +464,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

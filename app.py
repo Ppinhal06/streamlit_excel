@@ -4,6 +4,7 @@ import io
 import json
 import copy
 import re
+from difflib import SequenceMatcher
 from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
@@ -46,7 +47,7 @@ engineering_rules = {
         "per_unit": ["Enable", "Common Fault", "Control Signal", "Immersion Temperature Sensor", "High Limit Thermostat (60-95 Man. Reset)"]
     },
     "AHU (Air Handling Unit)": {
-        "per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temp Sensor", "Return Air Temp Sensor", "Frost Stat"]
+        "per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temperature Sensor", "Extract Air Temperature Sensor", "Manual Reset Duct Frost Stat"]
     },
     "FCU (Fan Coil Unit)": {
         "per_unit": ["Space Temperature Sensor", "Control Valve Actuator"]
@@ -55,10 +56,10 @@ engineering_rules = {
         "per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]
     },
     "Chiller": {
-        "per_unit": ["Chiller Enable", "Chiller Status", "Chiller Flow Switch", "Chiller Flow Temp Sensor", "Chiller Return Temp Sensor"]
+        "per_unit": ["Chiller Enable and Status", "Chiller Flow Switch", "Chiller Flow Immersion Temperature Sensor", "Chiller Return Immersion Temperature Sensor"]
     },
     "Extract Fan": {
-        "per_unit": ["Fan Enable", "Fan Current Switch"]
+        "per_unit": ["Enable and Current Switch"]
     },
     "Metering": {
         "mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]
@@ -91,9 +92,9 @@ component_catalog = {
     "High Limit Thermostat (60-95 Man. Reset)": {"Part": "RAK TW 1000B", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Space Temperature Sensor": {"Part": "RS-Temp", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Control Valve Actuator": {"Part": "MVC / DB_VZ", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
-    "Supply Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Return Air Temp Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Supply Air Temperature Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Extract Air Temperature Sensor": {"Part": "Duct Temp Sensor", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Manual Reset Duct Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Tank Low Low Level Status": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Tank Section 1 Low Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Tank Section 1 High Level": {"Part": "LL13 (3M Cable)", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
@@ -102,13 +103,11 @@ component_catalog = {
     "Tank Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Solenoid Valve 40mm": {"Part": "Solenoid Valve 40mm / ZS50", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Ultrasonic Level Transmitter": {"Part": "LS-MC", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Chiller Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Enable and Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Chiller Flow Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Return Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Fan Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
-    "Fan Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Enable and Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Gas Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Water Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
@@ -121,23 +120,29 @@ def tiene_puntos(row):
             return True
     return False
 
-# --- MOTOR DE BÚSQUEDA HUMANA (Fuzzy Matcher) ---
-def fuzzy_match(ai_str, tpl_str):
-    ai_words = set(re.findall(r'[a-z0-9]+', str(ai_str).lower()))
-    tpl_words = set(re.findall(r'[a-z0-9]+', str(tpl_str).lower()))
+# --- MOTOR DE BÚSQUEDA FORENSE ESTRICTO ---
+def fuzzy_match_strict(ai_str, tpl_str):
+    ai_orig = str(ai_str).strip().lower().replace("temp ", "temperature ")
+    tpl_orig = str(tpl_str).strip().lower().replace("temp ", "temperature ")
     
-    if not ai_words or not tpl_words:
+    ai_words = set(re.findall(r'[a-z0-9]+', ai_orig))
+    tpl_words = set(re.findall(r'[a-z0-9]+', tpl_orig))
+    
+    if not ai_words or not tpl_words: return False
+
+    # Regla estricta para palabras cortas ("Enable", "Status")
+    if len(ai_words) <= 2:
+        if ai_orig == tpl_orig: return True
+        if ai_words == tpl_words: return True
+        if len(tpl_words) <= 3 and ai_words.issubset(tpl_words): return True
         return False
         
-    if ai_words.issubset(tpl_words) or tpl_words.issubset(ai_words):
-        return True
-        
-    if len(ai_words.intersection(tpl_words)) >= 2:
-        return True
-        
-    ai_merged = "".join(ai_words)
-    tpl_merged = "".join(tpl_words)
-    if ai_merged in tpl_merged or tpl_merged in ai_merged:
+    # Coincidencia directa
+    if ai_words == tpl_words: return True
+    if ai_words.issubset(tpl_words): return True
+    
+    # Coincidencia difusa solo si es muy alta (>80%) para evitar que "Return Air" pise a "Supply Air"
+    if SequenceMatcher(None, ai_orig, tpl_orig).ratio() > 0.85:
         return True
         
     return False
@@ -167,6 +172,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 req_row = r
                 break
                 
+        # 1. Limpiador de basura de fábrica (Borra los '1s' duros de tanques vacíos)
         for r in range(start_row, req_row):
             for c in [3, 4, 5, 6, 7, 8, 10, 11, 12]:
                 ws.cell(row=r, column=c).value = None 
@@ -184,6 +190,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if current_ai_parent:
                     current_ai_parent["children"].append(item)
 
+        # 3. Buscar inyección estricta
         for group in ai_groups:
             p_item = group["parent"]
             ai_p_desc = p_item.get("Description", "")
@@ -194,7 +201,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 part_cell = ws.cell(row=r, column=9).value
                 
                 if desc_cell and not part_cell:
-                    if fuzzy_match(ai_p_desc, desc_cell):
+                    if fuzzy_match_strict(ai_p_desc, desc_cell):
                         if not ws.cell(row=r, column=8).value:
                             best_match_row = r
                             break
@@ -206,6 +213,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 for child in group["children"]:
                     ai_c_desc = child.get("Description", "")
                     
+                    # Busca solo en los hijos inmediatos de ese equipo para no invadir otras secciones
                     for cr in range(best_match_row + 1, req_row):
                         c_desc = ws.cell(row=cr, column=2).value
                         c_part = ws.cell(row=cr, column=9).value
@@ -214,7 +222,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                             break 
                             
                         if c_desc:
-                            if fuzzy_match(ai_c_desc, c_desc):
+                            if fuzzy_match_strict(ai_c_desc, c_desc):
                                 if child.get("AI"): ws.cell(row=cr, column=3).value = child.get("AI")
                                 if child.get("AO"): ws.cell(row=cr, column=4).value = child.get("AO")
                                 if child.get("DI"): ws.cell(row=cr, column=5).value = child.get("DI")
@@ -281,7 +289,7 @@ if st.button("Generate Points List"):
     if not api_key or not project_description:
         st.warning("Please ensure you have entered your API Key and provided a project description.")
     else:
-        with st.spinner("Engineering system points and applying fuzzy logic to template..."):
+        with st.spinner("Engineering system points and strictly mapping to template..."):
             prompt = f"""
             You are an expert BEMS estimator working for DC Controls. Generate a Points List based on the description.
             
@@ -292,25 +300,16 @@ if st.button("Generate Points List"):
             {json.dumps(component_catalog, indent=2)}
             
             CRITICAL FORMATTING INSTRUCTIONS:
-            1. Create a HEADER ROW for each main equipment group. (e.g., Description: "Boiler", Quantity: 2, MCC: "MCB". Leave AI, AO, DI, DO, Labour blank).
-            2. Below the header row, list its components based on the ENGINEERING RULES.
-            3. CRITICAL RULE: For components (child rows), "Quantity" and "MCC" MUST be left completely blank (""). Only the HEADER ROW should contain the Quantity and MCC.
+            1. Create a HEADER ROW for each main equipment group.
+            2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES. DO NOT MAKE UP DESCRIPTIONS.
+            3. CRITICAL RULE: For components (child rows), "Quantity" and "MCC" MUST be left completely blank ("").
             4. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI).
             5. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO, and Labour by the main equipment quantity.
             6. Use the exact Part No. from the catalog.
-            7. Leave IOs or Labour as empty strings ("") if the value is 0.
             
             User description: "{project_description}"
             
-            Return ONLY a JSON array matching the standard columns. DO NOT use markdown. You MUST use these exact keys:
-            [
-              {{
-                "Description": "Storage Tank", "AI": "", "AO": "", "DI": "", "DO": "", "MCC": "MCB", "Quantity": 1, "Part No.": "", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": ""
-              }},
-              {{
-                "Description": "Tank Immersion Temperature Sensor", "AI": 1, "AO": "", "DI": "", "DO": "", "MCC": "", "Quantity": "", "Part No.": "TI/Brass Pocket", "Panel At 20%": "", "Parts At 0%": "", "Labour At 20%": 50
-              }}
-            ]
+            Return ONLY a JSON array.
             """
             try:
                 response = model.generate_content(prompt)

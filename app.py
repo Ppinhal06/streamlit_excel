@@ -88,13 +88,20 @@ component_catalog = {
     "Electricity Meter Pulsed Input": {"Part": "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
 }
 
+def tiene_puntos(row):
+    for io_type in ["AI", "AO", "DI", "DO"]:
+        val = str(row.get(io_type, "")).strip()
+        if val and val.replace('.', '', 1).isdigit() and float(val) > 0:
+            return True
+    return False
+
 def fuzzy_match_parent(ai_desc, tpl_desc):
     ai = str(ai_desc).lower()
     tpl = str(tpl_desc).lower().strip()
+    
+    # EL ESCUDO ANTI-FANTASMAS (Mata al 1.00kW y a todos sus familiares)
     if any(x in tpl for x in ["sensor", "actuator", "valve", "switch", "fault", "enable", "status", "mains", "burner", "wheel", "battery", "heater", "kw"]):
-        if "pump" in tpl and "pump" not in ai: return False
-        if "pump" in tpl and "pump" in ai: pass
-        else: return False
+        return False
 
     if "common lphw" in ai and ("common lphw" in tpl or "common chw" in tpl): return True
     if "boiler" in ai and tpl == "boiler": return True
@@ -141,7 +148,6 @@ def get_catalog_data(desc):
             return v
     return {}
 
-# DETECTOR ANTI-ERRORES: Sabe qué es padre y qué es hijo, incluso si la IA olvida datos.
 def is_parent(item):
     desc = str(item.get("Description", "")).strip()
     part = str(item.get("Part No.", "")).strip()
@@ -587,7 +593,27 @@ if st.button("Generate Points List"):
                             item[key] = ""
                 
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
-                buffer_filtrado = crear_excel_formateado(materials_data, project_name, es_io_schedule=True)
+
+                datos_io = []
+                headers_pendientes = []
+                for row in materials_data:
+                    desc = str(row.get("Description", "")).strip()
+                    part = str(row.get("Part No.", "")).strip()
+                    qty = str(row.get("Quantity", "")).strip()
+                    
+                    es_header = bool(desc) and not bool(part) and not tiene_puntos(row)
+                    if es_header:
+                        if not qty:
+                            pass 
+                        else:
+                            headers_pendientes.append(row)
+                    elif tiene_puntos(row):
+                        for h in headers_pendientes:
+                            datos_io.append(h)
+                        headers_pendientes = [] 
+                        datos_io.append(row)
+
+                buffer_filtrado = crear_excel_formateado(datos_io, project_name, es_io_schedule=True)
                 
                 st.session_state.generado = True
                 st.session_state.buffer_full = buffer_full

@@ -106,7 +106,6 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
         if "pump" in tpl and "pump" in ai: pass
         else: return False
 
-    # REGLAS ANTI-COLISION DE AGUA FRÍA Y CALIENTE
     if "chw" in ai and "lphw" in tpl: return False
     if "lphw" in ai and "chw" in tpl: return False
 
@@ -314,7 +313,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if not isinstance(cell_name, MergedCell):
                     cell_name.value = ai_p_desc
             
-            # ELIMINAMOS CUALQUIER INTENTO DE ESCRIBIR EN LA COLUMNA 7 (MCC)
             cell_qty = ws.cell(row=best_match_row, column=8)
             if not isinstance(cell_qty, MergedCell): cell_qty.value = p_item.get("Quantity", "")
             
@@ -616,27 +614,8 @@ if st.button("Generate Points List"):
                             item[key] = ""
                 
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
-
-                datos_io = []
-                headers_pendientes = []
-                for row in materials_data:
-                    desc = str(row.get("Description", "")).strip()
-                    part = str(row.get("Part No.", "")).strip()
-                    qty = str(row.get("Quantity", "")).strip()
-                    
-                    es_header = bool(desc) and not bool(part) and not tiene_puntos(row)
-                    if es_header:
-                        if not qty:
-                            pass 
-                        else:
-                            headers_pendientes.append(row)
-                    elif tiene_puntos(row):
-                        for h in headers_pendientes:
-                            datos_io.append(h)
-                        headers_pendientes = [] 
-                        datos_io.append(row)
-
-                buffer_filtrado = crear_excel_formateado(datos_io, project_name, es_io_schedule=True)
+                # SE PASA LA DATA PURA Y DURA DIRECTO AL BOM (Sin filtros estúpidos que borren los sensores)
+                buffer_filtrado = crear_excel_formateado(materials_data, project_name, es_io_schedule=True)
                 
                 st.session_state.generado = True
                 st.session_state.buffer_full = buffer_full
@@ -652,6 +631,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
         st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

@@ -101,6 +101,7 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
     ai = str(ai_desc).lower()
     tpl = str(tpl_desc).lower().strip()
     
+    # Excepciones críticas para evitar colisiones
     if any(x in tpl for x in ["sensor", "actuator", "valve", "switch", "fault", "enable", "status", "mains", "burner", "wheel", "battery", "heater", "kw"]):
         if "pump" in tpl and "pump" not in ai: return False
         if "pump" in tpl and "pump" in ai: pass
@@ -156,18 +157,16 @@ def get_catalog_data(desc):
             return v
     return {}
 
+# FIX MAESTRO: Reparado el detector de padres para que ya no mande todo a huérfanos. 
+# Solo valida si la fila NO tiene componentes asignados en el catálogo y NO incluye partes.
 def is_parent(item):
-    desc = str(item.get("Description", "")).strip().lower()
+    desc = str(item.get("Description", "")).strip()
     part = str(item.get("Part No.", "")).strip()
     if part: return False
-    
-    parents = ["common", "boiler", "pump", "pressurisation", "calorifier", "hot water generator", "ahu", "air handling", "fcu", "fan coil", "tank", "chiller", "extract fan", "metering"]
-    for p in parents:
-        if p in desc:
-            if any(x in desc for x in ["sensor", "actuator", "valve", "switch", "fault", "enable", "status", "heater", "kw"]):
-                return False
-            return True
-    return False
+    if any(str(item.get(io_type, "")).strip().replace('.', '', 1).isdigit() for io_type in ["AI", "AO", "DI", "DO"]):
+        return False
+    if get_catalog_data(desc): return False
+    return True
 
 def actualizar_formulas(ws, green_idx, total_insert):
     def replacer(match):
@@ -307,6 +306,11 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
             p_item = group["parent"]
             ai_p_desc = p_item.get("Description", "")
             
+            # PROTECCIÓN: Si es huérfano pasa a la cola de insert.
+            if not best_match_row:
+                orphans_to_insert.append({"parent": p_item, "children": group["children"], "is_partial": False})
+                continue
+            
             tpl_name = str(ws.cell(row=best_match_row, column=2).value or "")
             if "XXXX" in tpl_name or "??" in tpl_name:
                 cell_name = ws.cell(row=best_match_row, column=2)
@@ -350,10 +354,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     
             if missing_children:
                 orphans_to_insert.append({"parent": p_item, "children": missing_children, "is_partial": True})
-                
-        for group in ai_groups:
-            if not group.get("best_match_row"):
-                orphans_to_insert.append({"parent": group["parent"], "children": group["children"], "is_partial": False})
 
         if orphans_to_insert:
             total_insert = sum(1 + len(org["children"]) for org in orphans_to_insert)
@@ -614,7 +614,6 @@ if st.button("Generate Points List"):
                             item[key] = ""
                 
                 buffer_full = crear_excel_formateado(materials_data, project_name, es_io_schedule=False)
-                # SE PASA LA DATA PURA Y DURA DIRECTO AL BOM (Sin filtros estúpidos que borren los sensores)
                 buffer_filtrado = crear_excel_formateado(materials_data, project_name, es_io_schedule=True)
                 
                 st.session_state.generado = True
@@ -633,4 +632,4 @@ if st.session_state.generado:
     with col_btn1:
         st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

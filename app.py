@@ -27,8 +27,9 @@ if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
+# Se eliminó la etiqueta "mandatory" para evitar que la IA inyecte cosas que no pediste
 engineering_rules = {
-    "Common LPHW/CHW Devices (System Level)": {"mandatory": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
+    "Common LPHW/CHW Devices (System Level)": {"per_unit": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
     "Boiler": {"per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]},
     "Pump (Primary/Secondary)": {"per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]},
     "Pressurisation Unit": {"per_unit": ["Pressurisation Unit High Pressure", "Pressurisation Unit Low Pressure"]},
@@ -38,7 +39,7 @@ engineering_rules = {
     "Storage Tank (Cold Water / Mains)": {"per_unit": ["Tank Low Low Level Status", "Tank Section 1 Low Level", "Tank Section 1 High Level", "Tank Section 2 Low Level", "Tank Section 2 High Level", "Tank Immersion Temperature Sensor", "Solenoid Valve 40mm", "Ultrasonic Level Transmitter"]},
     "Chiller": {"per_unit": ["Chiller Enable and Status", "Chiller Flow Switch", "Chiller Flow Immersion Temperature Sensor", "Chiller Return Immersion Temperature Sensor"]},
     "Extract Fan": {"per_unit": ["Enable and Current Switch"]},
-    "Metering": {"mandatory": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]}
+    "Metering": {"per_unit": ["Gas Meter Pulsed Input", "Water Meter Pulsed Input", "Electricity Meter Pulsed Input"]}
 }
 
 component_catalog = {
@@ -109,10 +110,7 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
     if "pump" in ai and "pump" in tpl:
         if "recovery" not in tpl: return True
     if "pressurisation" in ai and "pressurisation unit" in tpl: return True
-    
-    # EL PARCHE DEL CALORIFIER: Se ignora tajantemente el "Hot Water Generator No.1" para forzar el match con la fila principal
     if "calorifier" in ai and tpl == "calorifier": return True
-    
     if "ahu" in ai and (tpl == "ahu" or tpl == "air handling units" or tpl == "air handling unit"): return True
     if "fcu" in ai and (tpl == "fcu" or "fan coil" in tpl): return True
     if "tank" in ai and "tank" in tpl: return True
@@ -568,22 +566,20 @@ if st.button("Generate Points List"):
     else:
         with st.spinner("Engineering system points and intelligently routing to template..."):
             prompt = f"""
-            You are an expert BEMS estimator working for DC Controls. Generate a Points List based on the description.
+            You are an expert BEMS estimator working for DC Controls. Generate a Points List based ONLY on the explicit systems requested.
             
             ENGINEERING RULES (Known Systems):
             {json.dumps(engineering_rules, indent=2)}
             
-            TECHNICAL CATALOG:
-            {json.dumps(component_catalog, indent=2)}
-            
             CRITICAL FORMATTING INSTRUCTIONS:
-            1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description" (e.g. "AHU (Air Handling Unit)"). DO NOT INVENT NAMES.
+            1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description". DO NOT INVENT NAMES.
             2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES.
-            3. CRITICAL RULE: For components (child rows), "Quantity" and "MCC" MUST be left completely blank ("").
-            4. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI).
-            5. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO by the main equipment quantity. 
-            6. You do NOT need to calculate or output "Part No." or "Labour At 20%". Python will do it automatically.
-            7. Leave IOs as completely empty strings ("") if the value is 0. Do NOT output a 0.
+            3. CRITICAL RULE: "MCC" MUST be left completely blank ("") for ALL rows (both parent and child). Do NOT invent MCC values like 1.0kW.
+            4. ONLY include equipment explicitly requested by the user. Do NOT add unrequested systems like "Common LPHW/CHW Devices" unless prompted.
+            5. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI).
+            6. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO by the main equipment quantity. 
+            7. You do NOT need to calculate or output "Part No." or "Labour At 20%". Python will do it automatically.
+            8. Leave IOs as completely empty strings ("") if the value is 0. Do NOT output a 0.
             
             User description: "{project_description}"
             
@@ -638,4 +634,4 @@ if st.session_state.generado:
     with col_btn1:
         st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

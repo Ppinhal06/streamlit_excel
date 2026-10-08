@@ -27,8 +27,10 @@ if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
+# REGLAS DIVIDIDAS Y BLINDADAS
 engineering_rules = {
-    "Common LPHW/CHW Devices (System Level)": {"per_unit": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
+    "Common Heating Devices (LPHW)": {"per_unit": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
+    "Common Cooling Devices (CHW)": {"per_unit": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor"]},
     "Boiler": {"per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]},
     "Pump (Primary/Secondary)": {"per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]},
     "Pressurisation Unit": {"per_unit": ["Pressurisation Unit High Pressure", "Pressurisation Unit Low Pressure"]},
@@ -104,7 +106,9 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
         if "pump" in tpl and "pump" in ai: pass
         else: return False
 
-    if "common lphw" in ai and ("common lphw" in tpl or "common chw" in tpl): return True
+    if "lphw" in ai and "lphw" in tpl and "common" in tpl: return True
+    if "chw" in ai and "chw" in tpl and "common" in tpl: return True
+    
     if "boiler" in ai and tpl == "boiler": return True
     if "pump" in ai and "pump" in tpl:
         if "recovery" not in tpl: return True
@@ -149,14 +153,19 @@ def get_catalog_data(desc):
             return v
     return {}
 
+# DETECTOR ROBUSTO: Identifica los padres a la fuerza bruta, impidiendo que los confunda con sensores
 def is_parent(item):
-    desc = str(item.get("Description", "")).strip()
+    desc = str(item.get("Description", "")).strip().lower()
     part = str(item.get("Part No.", "")).strip()
     if part: return False
-    if any(str(item.get(io_type, "")).strip().replace('.', '', 1).isdigit() for io_type in ["AI", "AO", "DI", "DO"]):
-        return False
-    if get_catalog_data(desc): return False
-    return True
+    
+    parents = ["common", "boiler", "pump", "pressurisation", "calorifier", "hot water generator", "ahu", "air handling", "fcu", "fan coil", "tank", "chiller", "extract fan", "metering"]
+    for p in parents:
+        if p in desc:
+            if any(x in desc for x in ["sensor", "actuator", "valve", "switch", "fault", "enable", "status", "heater", "kw"]):
+                return False
+            return True
+    return False
 
 def actualizar_formulas(ws, green_idx, total_insert):
     def replacer(match):
@@ -302,9 +311,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if not isinstance(cell_name, MergedCell):
                     cell_name.value = ai_p_desc
             
-            cell_mcc = ws.cell(row=best_match_row, column=7)
-            if not isinstance(cell_mcc, MergedCell): cell_mcc.value = p_item.get("MCC", "")
-            
+            # ELIMINADO EL MCC INVENTADO. Solo escribimos la Cantidad.
             cell_qty = ws.cell(row=best_match_row, column=8)
             if not isinstance(cell_qty, MergedCell): cell_qty.value = p_item.get("Quantity", "")
             
@@ -366,9 +373,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                     if not isinstance(cell_title, MergedCell): cell_title.value = titulo
                     
                     if not org["is_partial"]:
-                        c_mcc = ws.cell(row=current_insert_row, column=7)
                         c_qty = ws.cell(row=current_insert_row, column=8)
-                        if not isinstance(c_mcc, MergedCell): c_mcc.value = p_item.get("MCC", "")
                         if not isinstance(c_qty, MergedCell): c_qty.value = p_item.get("Quantity", "")
                         
                     clonar_estilo_columna(ws, green_row_idx - 1, current_insert_row, es_padre=True)
@@ -397,7 +402,6 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         clonar_estilo_columna(ws, green_row_idx - 1, current_insert_row, es_padre=False)
                         current_insert_row += 1
 
-        # LA BARREDORA ANTI-FANTASMAS (Limpia los XXXX de las filas que la IA ignoró)
         limpiar_nombres_feos(ws, start_row, green_row_idx + (total_insert if orphans_to_insert else 0))
 
     else:
@@ -588,7 +592,7 @@ if st.button("Generate Points List"):
             1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description". DO NOT INVENT NAMES.
             2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES.
             3. CRITICAL RULE: "MCC" MUST be left completely blank ("") for ALL rows (both parent and child). Do NOT invent MCC values like 1.0kW.
-            4. ONLY include equipment explicitly requested by the user. Do NOT add unrequested systems like "Common LPHW/CHW Devices" unless prompted.
+            4. ONLY include equipment explicitly requested by the user. Do NOT add unrequested systems.
             5. IF A SYSTEM IS NOT IN THE RULES, infer standard BEMS components for it (Enable DO, Status DI, Fault DI).
             6. CRITICAL CALCULATION: For each component, multiply base AI, AO, DI, DO by the main equipment quantity. 
             7. You do NOT need to calculate or output "Part No." or "Labour At 20%". Python will do it automatically.
@@ -645,6 +649,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
         st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

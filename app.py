@@ -27,7 +27,6 @@ if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# Se eliminó la etiqueta "mandatory" para evitar que la IA inyecte cosas que no pediste
 engineering_rules = {
     "Common LPHW/CHW Devices (System Level)": {"per_unit": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
     "Boiler": {"per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]},
@@ -217,6 +216,14 @@ def clonar_estilo_columna(ws, source_row, target_row, es_padre=False):
         except AttributeError:
             pass
 
+def limpiar_nombres_feos(ws, start_row, end_row):
+    for r in range(start_row, end_row):
+        cell = ws.cell(row=r, column=2)
+        if not isinstance(cell, MergedCell):
+            val = str(cell.value or "").strip()
+            if "XXXX" in val or "??" in val:
+                cell.value = val.split(" - ")[0].strip()
+
 def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
     try:
         wb = load_workbook("template.xlsx")
@@ -389,6 +396,9 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                         
                         clonar_estilo_columna(ws, green_row_idx - 1, current_insert_row, es_padre=False)
                         current_insert_row += 1
+
+        # LA BARREDORA ANTI-FANTASMAS (Limpia los XXXX de las filas que la IA ignoró)
+        limpiar_nombres_feos(ws, start_row, green_row_idx + (total_insert if orphans_to_insert else 0))
 
     else:
         for r in range(start_row, ws.max_row + 1):
@@ -571,6 +581,9 @@ if st.button("Generate Points List"):
             ENGINEERING RULES (Known Systems):
             {json.dumps(engineering_rules, indent=2)}
             
+            TECHNICAL CATALOG:
+            {json.dumps(component_catalog, indent=2)}
+            
             CRITICAL FORMATTING INSTRUCTIONS:
             1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description". DO NOT INVENT NAMES.
             2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES.
@@ -634,4 +647,4 @@ if st.session_state.generado:
     with col_btn1:
         st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

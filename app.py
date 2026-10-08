@@ -27,12 +27,12 @@ if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# REGLAS DIVIDIDAS Y BLINDADAS
 engineering_rules = {
     "Common Heating Devices (LPHW)": {"per_unit": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor", "Immersion Frost Thermostat"]},
     "Common Cooling Devices (CHW)": {"per_unit": ["Header Flow Immersion Temperature Sensor", "Header Return Immersion Temperature Sensor", "Outside Frost Thermostat", "Outside Temperature Sensor"]},
     "Boiler": {"per_unit": ["Boiler Enable", "Boiler Common Fault", "Boiler Control Signal", "Boiler Flow Immersion Temperature Sensor", "Boiler Return Immersion Temperature Sensor"]},
-    "Pump (Primary/Secondary)": {"per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]},
+    "CHW Pump (Primary/Secondary)": {"per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]},
+    "LPHW Pump (Primary/Secondary)": {"per_unit": ["Pump Enable", "Pump Status", "Variable Speed Drive", "Flow Immersion Temperature Sensor", "3 Port Control Valve / Actuator"]},
     "Pressurisation Unit": {"per_unit": ["Pressurisation Unit High Pressure", "Pressurisation Unit Low Pressure"]},
     "Calorifier / Hot Water Generator": {"per_unit": ["Enable", "Common Fault", "Control Signal", "Immersion Temperature Sensor", "High Limit Thermostat (60-95 Man. Reset)"]},
     "AHU (Air Handling Unit)": {"per_unit": ["Enable", "Status", "Control Signal", "Supply Air Temp Sensor", "Return Air Temp Sensor", "Frost Stat"]},
@@ -106,6 +106,10 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
         if "pump" in tpl and "pump" in ai: pass
         else: return False
 
+    # REGLAS ANTI-COLISION DE AGUA FRÍA Y CALIENTE
+    if "chw" in ai and "lphw" in tpl: return False
+    if "lphw" in ai and "chw" in tpl: return False
+
     if "lphw" in ai and "lphw" in tpl and "common" in tpl: return True
     if "chw" in ai and "chw" in tpl and "common" in tpl: return True
     
@@ -153,7 +157,6 @@ def get_catalog_data(desc):
             return v
     return {}
 
-# DETECTOR ROBUSTO: Identifica los padres a la fuerza bruta, impidiendo que los confunda con sensores
 def is_parent(item):
     desc = str(item.get("Description", "")).strip().lower()
     part = str(item.get("Part No.", "")).strip()
@@ -311,7 +314,7 @@ def crear_excel_formateado(datos, nombre_proyecto, es_io_schedule=False):
                 if not isinstance(cell_name, MergedCell):
                     cell_name.value = ai_p_desc
             
-            # ELIMINADO EL MCC INVENTADO. Solo escribimos la Cantidad.
+            # ELIMINAMOS CUALQUIER INTENTO DE ESCRIBIR EN LA COLUMNA 7 (MCC)
             cell_qty = ws.cell(row=best_match_row, column=8)
             if not isinstance(cell_qty, MergedCell): cell_qty.value = p_item.get("Quantity", "")
             

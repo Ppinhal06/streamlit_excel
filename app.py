@@ -99,16 +99,20 @@ def fuzzy_match_parent(ai_desc, tpl_desc):
     ai = str(ai_desc).lower()
     tpl = str(tpl_desc).lower().strip()
     
-    # EL ESCUDO ANTI-FANTASMAS (Mata al 1.00kW y a todos sus familiares)
     if any(x in tpl for x in ["sensor", "actuator", "valve", "switch", "fault", "enable", "status", "mains", "burner", "wheel", "battery", "heater", "kw"]):
-        return False
+        if "pump" in tpl and "pump" not in ai: return False
+        if "pump" in tpl and "pump" in ai: pass
+        else: return False
 
     if "common lphw" in ai and ("common lphw" in tpl or "common chw" in tpl): return True
     if "boiler" in ai and tpl == "boiler": return True
     if "pump" in ai and "pump" in tpl:
         if "recovery" not in tpl: return True
     if "pressurisation" in ai and "pressurisation unit" in tpl: return True
-    if "calorifier" in ai and (tpl == "calorifier" or tpl.startswith("hot water generator")): return True
+    
+    # EL PARCHE DEL CALORIFIER: Se ignora tajantemente el "Hot Water Generator No.1" para forzar el match con la fila principal
+    if "calorifier" in ai and tpl == "calorifier": return True
+    
     if "ahu" in ai and (tpl == "ahu" or tpl == "air handling units" or tpl == "air handling unit"): return True
     if "fcu" in ai and (tpl == "fcu" or "fan coil" in tpl): return True
     if "tank" in ai and "tank" in tpl: return True
@@ -569,6 +573,9 @@ if st.button("Generate Points List"):
             ENGINEERING RULES (Known Systems):
             {json.dumps(engineering_rules, indent=2)}
             
+            TECHNICAL CATALOG:
+            {json.dumps(component_catalog, indent=2)}
+            
             CRITICAL FORMATTING INSTRUCTIONS:
             1. Create a HEADER ROW for each main equipment group. YOU MUST USE THE EXACT KEY FROM THE ENGINEERING RULES DICTIONARY AS THE "Description" (e.g. "AHU (Air Handling Unit)"). DO NOT INVENT NAMES.
             2. Below the header row, list its components based EXACTLY on the ENGINEERING RULES.
@@ -629,6 +636,6 @@ if st.session_state.generado:
     st.success("Documents generated successfully!")
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("📄 Download Official Quotation (Full)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
         st.download_button("🔌 Download I/O Schedule Only (>0)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

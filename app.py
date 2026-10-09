@@ -9,13 +9,23 @@ import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.cell.cell import MergedCell
+import subprocess
+import os
 
 st.set_page_config(page_title="BEMS Estimator Pro - DC Controls", layout="wide")
 st.title("Automated BEMS Points List & Estimator")
 st.markdown("---")
 
+# Inicializar variables de estado
 if "generado" not in st.session_state:
     st.session_state.generado = False
+if "excel_revisado" not in st.session_state:
+    st.session_state.excel_revisado = False
+if "autorizado" not in st.session_state:
+    st.session_state.autorizado = False
+
+def marcar_descargado():
+    st.session_state.excel_revisado = True
 
 with st.sidebar:
     st.header("System Configuration")
@@ -24,7 +34,7 @@ with st.sidebar:
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 
 # === LA LISTA 100% PURA DE TU EXCEL ===
 allowed_systems = [
@@ -57,7 +67,7 @@ allowed_systems = [
     "FCU (Fan Coil Unit)"
 ]
 
-# CATALOGO FIJO PARA EL BOM (Para calcular puntos en Python sin romper el Excel)
+# CATALOGO FIJO PARA EL BOM
 component_catalog = {
     "LPHW Header Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "LPHW Header Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
@@ -316,7 +326,6 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 system_quantities = json.loads(json_text)
                 
-                # Guardamos las cantidades para usarlas en el PDF
                 st.session_state.materials_data = system_quantities 
                 
                 buffer_full, buffer_filtrado = procesar_archivos(system_quantities, project_name)
@@ -327,89 +336,89 @@ if st.button("Generate Points List"):
                     st.session_state.buffer_filtrado = buffer_filtrado
                     st.session_state.nombre_archivo = f"Quotation_{project_name.replace(' ', '_')}.xlsx"
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
-                    st.session_state.autorizado = False # Resetea la autorización al generar uno nuevo
+                    
+                    # Reseteamos los candados cada vez que se genera un proyecto nuevo
+                    st.session_state.excel_revisado = False
+                    st.session_state.autorizado = False 
 
             except Exception as e:
                 st.error(f"Error AI/JSON: {e}")
 
-# --- SECCIÓN DE DESCARGAS Y VERIFICACIÓN PARA PDF ---
+# --- SECCIÓN DE DESCARGAS Y VERIFICACIÓN ---
 if st.session_state.generado:
     st.success("Documents generated successfully!")
     
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation (Excel)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(
+            "Download Official Quotation (Excel)", 
+            data=st.session_state.buffer_full, 
+            file_name=st.session_state.nombre_archivo, 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            on_click=marcar_descargado
+        )
     with col_btn2:
-        st.download_button("Download Bill of Materials (Excel)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(
+            "Download Bill of Materials (Excel)", 
+            data=st.session_state.buffer_filtrado, 
+            file_name=st.session_state.nombre_io, 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     
     st.markdown("---")
     
-    st.subheader("🔒 Manager Approval & PDF Export")
-    st.info("⚠️ Official PDF quotations cannot be printed without managerial authorization.")
-    
-    col_pass, col_btn_auth = st.columns([2, 1])
-    with col_pass:
-        manager_password = st.text_input("Enter Authorization Code (Manager Only):", type="password")
-    
-    # CONTRASEÑA DEL JEFE
-    SECRET_PASSWORD = "Example1" 
-    
-    with col_btn_auth:
-        st.write("") 
-        st.write("")
-        btn_authorize = st.button("Authorize & Unlock PDF")
+    # El candado mágico: Solo aparece si ya le dieron clic al Excel principal
+    if st.session_state.get("excel_revisado", False):
+        st.subheader("🔒 Manager Approval & Exact PDF Export")
+        st.info("Please ensure you have reviewed the Excel file. Enter authorization code to generate the final printable PDF.")
         
-    if btn_authorize:
-        if manager_password == SECRET_PASSWORD:
-            st.session_state.autorizado = True
-            st.success("✅ Quotation Verified and Authorized by Management.")
-        else:
-            st.error("❌ Invalid Authorization Code. Access Denied.")
-            st.session_state.autorizado = False
+        col_pass, col_btn_auth = st.columns([2, 1])
+        with col_pass:
+            manager_password = st.text_input("Enter Authorization Code (Manager Only):", type="password")
+        
+        # CONTRASEÑA DEL JEFE
+        SECRET_PASSWORD = "DC-Boss2026" 
+        
+        with col_btn_auth:
+            st.write("") 
+            st.write("")
+            btn_authorize = st.button("Authorize & Unlock PDF")
+            
+        if btn_authorize:
+            if manager_password == SECRET_PASSWORD:
+                st.session_state.autorizado = True
+                st.success("✅ Quotation Verified and Authorized by Management.")
+            else:
+                st.error("❌ Invalid Authorization Code. Access Denied.")
+                st.session_state.autorizado = False
 
-    if st.session_state.get("autorizado", False):
-        try:
-            from fpdf import FPDF
-            
-            pdf = FPDF(orientation="P", unit="mm", format="A4")
-            pdf.add_page()
-            
-            # Header
-            pdf.set_font("Arial", "B", 16)
-            pdf.set_text_color(0, 51, 102) 
-            pdf.cell(0, 10, "DC CONTROLS - OFFICIAL QUOTATION", ln=True, align="C")
-            
-            pdf.set_font("Arial", "", 10)
-            pdf.set_text_color(0, 0, 0)
-            pdf.cell(0, 6, f"Project: {project_name}", ln=True)
-            pdf.cell(0, 6, f"Date: {datetime.now().strftime('%B %d, %Y')}", ln=True)
-            pdf.cell(0, 6, "Status: VERIFIED & APPROVED", ln=True)
-            pdf.ln(10)
-            
-            # Tabla (Resumen de Sistemas)
-            pdf.set_font("Arial", "B", 11)
-            pdf.cell(100, 8, "System Description", border=1, fill=False)
-            pdf.cell(40, 8, "Quantity", border=1, align="C", ln=True)
-            
-            pdf.set_font("Arial", "", 10)
-            for sys_name, qty in st.session_state.materials_data.items():
-                if qty > 0:
-                    pdf.cell(100, 8, sys_name[:45], border=1) 
-                    pdf.cell(40, 8, str(qty), border=1, align="C", ln=True)
-
-            pdf.ln(15)
-            pdf.set_font("Arial", "I", 8)
-            pdf.cell(0, 5, "This is an authorized printable summary generated by the DC Controls BEMS Estimator.", ln=True, align="C")
-            
-            pdf_bytes = pdf.output(dest="S").encode("latin-1")
-            
-            st.download_button(
-                label="Download Authorized PDF for Printing",
-                data=pdf_bytes,
-                file_name=f"Approved_Quotation_{project_name.replace(' ', '_')}.pdf",
-                mime="application/pdf",
-                type="primary"
-            )
-            
-        except ImportError:
-            st.error("⚠️ FPDF library is missing. Please ensure 'fpdf' is in your GitHub requirements.txt file.")
+        if st.session_state.get("autorizado", False):
+            with st.spinner("Converting exact Excel to PDF (This takes a few seconds)..."):
+                try:
+                    temp_excel_path = "temp_quotation.xlsx"
+                    with open(temp_excel_path, "wb") as f:
+                        f.write(st.session_state.buffer_full)
+                    
+                    comando = [
+                        "libreoffice", "--headless", "--convert-to", "pdf", 
+                        temp_excel_path, "--outdir", "."
+                    ]
+                    subprocess.run(comando, check=True)
+                    
+                    temp_pdf_path = "temp_quotation.pdf"
+                    with open(temp_pdf_path, "rb") as f:
+                        pdf_bytes = f.read()
+                        
+                    os.remove(temp_excel_path)
+                    os.remove(temp_pdf_path)
+                    
+                    st.download_button(
+                        label="Download EXACT PDF for Printing",
+                        data=pdf_bytes,
+                        file_name=f"Approved_Quotation_{project_name.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        type="primary"
+                    )
+                except Exception as e:
+                    st.error("⚠️ Failed to generate PDF. Make sure 'libreoffice' is added to packages.txt in GitHub.")
+                    st.error(f"Detalle técnico: {e}")

@@ -194,7 +194,7 @@ def procesar_archivos(json_data, nombre_proyecto):
         wb_quot.save(buf_quot)
 
         # --- 2. PROCESAR BOM ---
-        wb_bom = load_workbook("template_2_2.xlsx")
+        wb_bom = load_workbook("template_2.xlsx")
         ws_bom = wb_bom.active
         
         # Llenar encabezados estrictamente de B1 a B5

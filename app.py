@@ -24,10 +24,9 @@ with st.sidebar:
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 
 # === LA LISTA 100% PURA DE TU EXCEL ===
-# Si no está en esta lista, la IA no puede inventarlo. Cero alucinaciones.
 allowed_systems = [
     "Common LPHW Devices",
     "Hot Water Generator  No.1",
@@ -98,14 +97,11 @@ component_catalog = {
     "Radiator Control Valve Actuator": {"Part": "Valve 25mm", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
 }
 
-# Diccionario de búsqueda flexible para agrupar en el BOM
 def get_catalog_match(desc, part):
     d = desc.lower()
     p = part.lower()
-    
     for k, v in component_catalog.items():
         if k.lower() == d: return v
-        
     if "immersion temperature" in d and "flow" in d: return component_catalog["LPHW Header Flow Immersion Temperature Sensor"]
     if "immersion temperature" in d and "return" in d: return component_catalog["LPHW Header Return Immersion Temperature Sensor"]
     if "frost stat" in d or "frost thermostat" in d: return component_catalog["Outside Frost Thermostat"]
@@ -115,21 +111,15 @@ def get_catalog_match(desc, part):
     if "fault" in d or "status" in d or "switch" in d: return {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
     if "variable speed" in d or "vsd" in d: return {"Part": "VSD", "AI": 0, "AO": 1, "DI": 1, "DO": 1, "Labour": 50}
     if "control signal" in d: return {"Part": "0...10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
-    
     return {"Part": part, "AI": 0, "AO": 0, "DI": 0, "DO": 0, "Labour": 50}
 
-# Encuentra la fila exacta del equipo en tu template
 def match_native_row(sys_name, ws):
     s = sys_name.lower().strip()
     for r in range(7, ws.max_row):
         desc = str(ws.cell(row=r, column=2).value or "").strip().lower()
         part = str(ws.cell(row=r, column=9).value or "").strip()
-        
-        if not desc or part: continue # Solo buscamos padres
-        
+        if not desc or part: continue
         if s == desc: return r
-        
-        # Búsquedas estrictas para que no meta basura
         if "boiler" in s and "boiler" == desc: return r
         if "pressurisation" in s and "pressurisation" in desc: return r
         if "calorifier" in s and "calorifier" == desc: return r
@@ -141,13 +131,26 @@ def match_native_row(sys_name, ws):
         if "extract fan" in s and "extract fan" in desc: return r
         if "metering" in s and "metering" in desc: return r
         if "radiator" in s and "radiator" in desc: return r
-        
     return None
+
+def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es_padre=False):
+    for c in range(1, 15):
+        try:
+            s_cell = source_ws.cell(row=source_row, column=c)
+            t_cell = target_ws.cell(row=target_row, column=c)
+            if isinstance(t_cell, MergedCell) or isinstance(s_cell, MergedCell): continue
+            fuente = copy.copy(source_ws.cell(row=source_row, column=9).font) if c == 8 else copy.copy(s_cell.font)
+            if c == 2: fuente.bold = es_padre
+            t_cell.font = fuente
+            t_cell.border = copy.copy(s_cell.border)
+            t_cell.alignment = copy.copy(s_cell.alignment)
+            t_cell.fill = copy.copy(s_cell.fill)
+            t_cell.number_format = s_cell.number_format
+        except AttributeError: pass
 
 def procesar_archivos(json_data, nombre_proyecto):
     try:
-        # --- 1. PREPARAR QUOTATION (Inyecta cantidades sin tocar fórmulas) ---
-        wb_quot = load_workbook("template_2.xlsx") # Apuntando al nuevo template
+        wb_quot = load_workbook("template_2.xlsx")
         ws_quot = wb_quot.active
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
         ws_quot['C4'] = datetime.now().strftime("%d/%m/%Y")
@@ -159,13 +162,11 @@ def procesar_archivos(json_data, nombre_proyecto):
             if desc in ["BMS Requirements", "Summary"]:
                 req_row = r
                 break
-            # Limpiamos cantidades previas por seguridad
             cell = ws_quot.cell(row=r, column=8)
             if not isinstance(cell, MergedCell): cell.value = None
 
         for sys_name, qty in json_data.items():
             if qty <= 0: continue
-            
             match_r = match_native_row(sys_name, ws_quot)
             if match_r:
                 ws_quot.cell(row=match_r, column=8).value = qty
@@ -174,7 +175,6 @@ def procesar_archivos(json_data, nombre_proyecto):
                     if "chiller mains" in next_desc:
                         ws_quot.cell(row=match_r + 1, column=8).value = qty
 
-        # Limpiamos los feos "XXXX" nativos
         for r in range(7, req_row):
             cell = ws_quot.cell(row=r, column=2)
             if not isinstance(cell, MergedCell):
@@ -185,15 +185,13 @@ def procesar_archivos(json_data, nombre_proyecto):
         buf_quot = io.BytesIO()
         wb_quot.save(buf_quot)
 
-        # --- 2. PREPARAR BOM (Extracción y consolidación pura) ---
-        wb_bom = load_workbook("template_2.xlsx") # Apuntando al nuevo template
+        wb_bom = load_workbook("template_2.xlsx")
         ws_bom = wb_bom.active
         ws_bom['B1'] = f"Project: {nombre_proyecto}"
         ws_bom['C4'] = datetime.now().strftime("%d/%m/%Y")
         ws_bom['C5'] = "Generated by AI Estimator - I/O Schedule Only"
         
         aggregated_io = {}
-        
         for r in range(7, req_row):
             desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
             part = str(ws_quot.cell(row=r, column=9).value or "").strip()
@@ -201,7 +199,6 @@ def procesar_archivos(json_data, nombre_proyecto):
             
             if desc and not part and qty_val and str(qty_val).isdigit() and int(qty_val) > 0:
                 parent_qty = int(qty_val)
-                
                 for child_r in range(r + 1, req_row):
                     c_desc = str(ws_quot.cell(row=child_r, column=2).value or "").strip()
                     c_part = str(ws_quot.cell(row=child_r, column=9).value or "").strip()
@@ -216,7 +213,6 @@ def procesar_archivos(json_data, nombre_proyecto):
                     cat_data = get_catalog_match(c_desc, c_part)
                     part_no = c_part if c_part else cat_data["Part"]
                     if not part_no: part_no = "Generic"
-                    
                     agg_key = part_no.strip().lower()
                     
                     if agg_key not in aggregated_io:
@@ -231,36 +227,16 @@ def procesar_archivos(json_data, nombre_proyecto):
                             clean_desc = "Control Valve / Actuator"
                             
                         aggregated_io[agg_key] = {
-                            "Description": clean_desc,
-                            "Part No.": part_no,
-                            "Quantity": 0,
-                            "AI": cat_data["AI"], "AO": cat_data["AO"], 
-                            "DI": cat_data["DI"], "DO": cat_data["DO"],
+                            "Description": clean_desc, "Part No.": part_no, "Quantity": 0,
+                            "AI": cat_data["AI"], "AO": cat_data["AO"], "DI": cat_data["DI"], "DO": cat_data["DO"],
                             "Labour_Base": cat_data["Labour"]
                         }
-                    
                     aggregated_io[agg_key]["Quantity"] += parent_qty
         
-        # Generar formato BOM
         for r in range(7, ws_bom.max_row):
             for c in range(2, 13):
                 cell = ws_bom.cell(row=r, column=c)
                 if not isinstance(cell, MergedCell): cell.value = None
-
-        def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es_padre=False):
-            for c in range(1, 15):
-                try:
-                    s_cell = source_ws.cell(row=source_row, column=c)
-                    t_cell = target_ws.cell(row=target_row, column=c)
-                    if isinstance(t_cell, MergedCell) or isinstance(s_cell, MergedCell): continue
-                    fuente = copy.copy(source_ws.cell(row=source_row, column=9).font) if c == 8 else copy.copy(s_cell.font)
-                    if c == 2: fuente.bold = es_padre
-                    t_cell.font = fuente
-                    t_cell.border = copy.copy(s_cell.border)
-                    t_cell.alignment = copy.copy(s_cell.alignment)
-                    t_cell.fill = copy.copy(s_cell.fill)
-                    t_cell.number_format = s_cell.number_format
-                except AttributeError: pass
 
         ws_bom.cell(row=7, column=2).value = "Consolidated Bill of Materials (BOM)"
         clonar_estilo_columna_local(wb_quot.active, ws_bom, 7, 7, es_padre=True)
@@ -340,6 +316,9 @@ if st.button("Generate Points List"):
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 system_quantities = json.loads(json_text)
                 
+                # Guardamos las cantidades para usarlas en el PDF
+                st.session_state.materials_data = system_quantities 
+                
                 buffer_full, buffer_filtrado = procesar_archivos(system_quantities, project_name)
                 
                 if buffer_full and buffer_filtrado:
@@ -348,14 +327,89 @@ if st.button("Generate Points List"):
                     st.session_state.buffer_filtrado = buffer_filtrado
                     st.session_state.nombre_archivo = f"Quotation_{project_name.replace(' ', '_')}.xlsx"
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
+                    st.session_state.autorizado = False # Resetea la autorización al generar uno nuevo
 
             except Exception as e:
                 st.error(f"Error AI/JSON: {e}")
 
+# --- SECCIÓN DE DESCARGAS Y VERIFICACIÓN PARA PDF ---
 if st.session_state.generado:
     st.success("Documents generated successfully!")
+    
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        st.download_button("Download Official Quotation", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download Official Quotation (Excel)", data=st.session_state.buffer_full, file_name=st.session_state.nombre_archivo, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with col_btn2:
-        st.download_button("Download Bill of Materials (BOM)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button("Download Bill of Materials (Excel)", data=st.session_state.buffer_filtrado, file_name=st.session_state.nombre_io, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    
+    st.markdown("---")
+    
+    st.subheader("🔒 Manager Approval & PDF Export")
+    st.info("⚠️ Official PDF quotations cannot be printed without managerial authorization.")
+    
+    col_pass, col_btn_auth = st.columns([2, 1])
+    with col_pass:
+        manager_password = st.text_input("Enter Authorization Code (Manager Only):", type="password")
+    
+    # CONTRASEÑA DEL JEFE
+    SECRET_PASSWORD = "Example1" 
+    
+    with col_btn_auth:
+        st.write("") 
+        st.write("")
+        btn_authorize = st.button("Authorize & Unlock PDF")
+        
+    if btn_authorize:
+        if manager_password == SECRET_PASSWORD:
+            st.session_state.autorizado = True
+            st.success("✅ Quotation Verified and Authorized by Management.")
+        else:
+            st.error("❌ Invalid Authorization Code. Access Denied.")
+            st.session_state.autorizado = False
+
+    if st.session_state.get("autorizado", False):
+        try:
+            from fpdf import FPDF
+            
+            pdf = FPDF(orientation="P", unit="mm", format="A4")
+            pdf.add_page()
+            
+            # Header
+            pdf.set_font("Arial", "B", 16)
+            pdf.set_text_color(0, 51, 102) 
+            pdf.cell(0, 10, "DC CONTROLS - OFFICIAL QUOTATION", ln=True, align="C")
+            
+            pdf.set_font("Arial", "", 10)
+            pdf.set_text_color(0, 0, 0)
+            pdf.cell(0, 6, f"Project: {project_name}", ln=True)
+            pdf.cell(0, 6, f"Date: {datetime.now().strftime('%B %d, %Y')}", ln=True)
+            pdf.cell(0, 6, "Status: VERIFIED & APPROVED", ln=True)
+            pdf.ln(10)
+            
+            # Tabla (Resumen de Sistemas)
+            pdf.set_font("Arial", "B", 11)
+            pdf.cell(100, 8, "System Description", border=1, fill=False)
+            pdf.cell(40, 8, "Quantity", border=1, align="C", ln=True)
+            
+            pdf.set_font("Arial", "", 10)
+            for sys_name, qty in st.session_state.materials_data.items():
+                if qty > 0:
+                    pdf.cell(100, 8, sys_name[:45], border=1) 
+                    pdf.cell(40, 8, str(qty), border=1, align="C", ln=True)
+
+            pdf.ln(15)
+            pdf.set_font("Arial", "I", 8)
+            pdf.cell(0, 5, "This is an authorized printable summary generated by the DC Controls BEMS Estimator.", ln=True, align="C")
+            
+            pdf_bytes = pdf.output(dest="S").encode("latin-1")
+            
+            st.download_button(
+                label="Download Authorized PDF for Printing",
+                data=pdf_bytes,
+                file_name=f"Approved_Quotation_{project_name.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                type="primary"
+            )
+            
+        except ImportError:
+            st.error("⚠️ FPDF library is missing. Please ensure 'fpdf' is in your GitHub requirements.txt file.")

@@ -7,7 +7,6 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
-from openpyxl.styles import PatternFill
 import subprocess
 import os
 
@@ -150,7 +149,7 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 
 def procesar_archivos(json_data, nombre_proyecto):
     try:
-        # --- 1. PROCESAR QUOTATION (EXCEL PURO PARA DESCARGAR) ---
+        # --- 1. PROCESAR QUOTATION ---
         wb_quot = load_workbook("template_2.xlsx")
         ws_quot = wb_quot.active
         
@@ -404,58 +403,20 @@ if st.session_state.generado:
                 st.write("")
                 with st.spinner("Rendering high-fidelity PDF via LibreOffice Engine..."):
                     try:
-                        # CARGAR LA COPIA INVISIBLE SOLO PARA EL PDF
+                        # Cargar el Excel generado en memoria
                         wb_pdf = load_workbook(io.BytesIO(st.session_state.buffer_full))
                         ws_pdf = wb_pdf.active
                         
-                        # 1. Pintar el encabezado de blanco (Oculta las líneas negras en el PDF)
-                        white_fill = PatternFill(start_color="FFFFFFFF", end_color="FFFFFFFF", fill_type="solid")
-                        for r in range(1, 6):
-                            for c in range(1, 9): 
-                                if ws_pdf.cell(row=r, column=c).fill.fill_type is None:
-                                    ws_pdf.cell(row=r, column=c).fill = white_fill
-                                    
-                        # 2. Ocultar los sistemas en ceros (Para hacer el PDF compacto)
-                        req_row_pdf = ws_pdf.max_row
-                        for r in range(7, ws_pdf.max_row):
-                            desc = str(ws_pdf.cell(row=r, column=2).value or "").strip()
-                            if desc in ["BMS Requirements", "Summary"]:
-                                req_row_pdf = r
-                                break
-                                
-                        r = 7
-                        while r < req_row_pdf:
-                            desc = str(ws_pdf.cell(row=r, column=2).value or "").strip()
-                            part = str(ws_pdf.cell(row=r, column=9).value or "").strip()
-                            qty_val = ws_pdf.cell(row=r, column=8).value
-                            
-                            if desc and not part:
-                                has_qty = False
-                                try:
-                                    if qty_val and int(qty_val) > 0:
-                                        has_qty = True
-                                except:
-                                    pass
-                                    
-                                next_r = r + 1
-                                while next_r < req_row_pdf:
-                                    n_desc = str(ws_pdf.cell(row=next_r, column=2).value or "").strip()
-                                    n_part = str(ws_pdf.cell(row=next_r, column=9).value or "").strip()
-                                    if not n_desc:
-                                        next_r += 1
-                                        break
-                                    if not n_part and ws_pdf.cell(row=next_r, column=8).value is not None:
-                                        break
-                                    next_r += 1
-                                    
-                                if not has_qty:
-                                    for hide_idx in range(r, next_r):
-                                        ws_pdf.row_dimensions[hide_idx].hidden = True
-                                r = next_r
-                            else:
-                                r += 1
+                        # HEREDAR DIRECTAMENTE LOS PARÁMETROS DE IMPRESIÓN DEL TEMPLATE NATIVO
+                        wb_orig = load_workbook("template_2.xlsx")
+                        ws_orig = wb_orig.active
+                        
+                        ws_pdf.page_setup.orientation = ws_orig.page_setup.orientation
+                        ws_pdf.page_setup.paperSize = ws_orig.page_setup.paperSize
+                        ws_pdf.page_setup.scale = ws_orig.page_setup.scale
+                        ws_pdf.print_area = ws_orig.print_area
+                        ws_pdf.print_options.gridLines = ws_orig.print_options.gridLines
 
-                        # Guardar copia temporal y convertir a PDF
                         temp_excel_path = "temp_quotation.xlsx"
                         wb_pdf.save(temp_excel_path)
                         
@@ -481,4 +442,4 @@ if st.session_state.generado:
                             use_container_width=True
                         )
                     except Exception as e:
-                        st.error("Error: LibreOffice engine failed. Ensure 'libreoffice' is in packages.txt.")
+                        st.error(f"Error: {e}")

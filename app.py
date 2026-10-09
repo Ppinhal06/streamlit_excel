@@ -24,7 +24,7 @@ with st.sidebar:
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash') 
+    model = genai.GenerativeModel('gemini-3.6-flash') 
 
 # === LA LISTA 100% PURA DE TU EXCEL ===
 allowed_systems = [

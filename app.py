@@ -150,7 +150,7 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 def procesar_archivos(json_data, nombre_proyecto):
     try:
         # Cargar el NUEVO template subido (Ojo: template_2_2.xlsx)
-        wb_quot = load_workbook("template_2_2.xlsx")
+        wb_quot = load_workbook("template_2.xlsx")
         ws_quot = wb_quot.active
         
         # Llenar encabezados

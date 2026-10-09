@@ -12,9 +12,8 @@ from openpyxl.cell.cell import MergedCell
 import subprocess
 import os
 
-st.set_page_config(page_title="BEMS Estimator Pro - DC Controls", layout="wide")
-st.title("Automated BEMS Points List & Estimator")
-st.markdown("---")
+# --- 1. CONFIGURACIÓN DE PÁGINA (Debe ir hasta arriba) ---
+st.set_page_config(page_title="BEMS Estimator Pro | DC Controls", page_icon="⚙️", layout="wide")
 
 # Inicializar variables de estado
 if "generado" not in st.session_state:
@@ -27,44 +26,44 @@ if "autorizado" not in st.session_state:
 def marcar_descargado():
     st.session_state.excel_revisado = True
 
+# --- 2. BARRA LATERAL (SIDEBAR) CORPORATIVA ---
 with st.sidebar:
-    st.header("System Configuration")
-    api_key = st.text_input("Enter API Key (Gemini):", type="password")
+    # Puedes reemplazar esta línea con: st.image("ruta/a/tu/logo.png")
+    st.markdown("<h2 style='text-align: center; color: #003366;'>DC CONTROLS</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray;'>BEMS Estimation Engine</p>", unsafe_allow_html=True)
     st.markdown("---")
+    
+    st.header("System Access")
+    api_key = st.text_input("Enter API Key (Gemini):", type="password", help="Requires authorized Gemini API token.")
+    
+    st.markdown("---")
+    st.markdown("Instructions")
+    st.markdown("""
+    1. Enter the **Project Name**.
+    2. Provide a clear **Scope Description**.
+    3. Click **Generate Quotation**.
+    4. Download and review the Excel file.
+    5. Enter the Manager Code to unlock the final PDF.
+    """)
+
+# --- 3. ENCABEZADO PRINCIPAL ---
+st.markdown("<h1 style='text-align: center; color: #003366;'>Automated BEMS Quotation System</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 18px; color: #555;'>AI-Powered I/O Schedule and Cost Estimator</p>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 
 # === LA LISTA 100% PURA DE TU EXCEL ===
 allowed_systems = [
-    "Common LPHW Devices",
-    "Hot Water Generator  No.1",
-    "Boiler",
-    "LPHW Pressurisation Unit",
-    "Dosing Unit",
-    "Primary LPHW Single Pumps",
-    "Calorifier",
-    "Gas Detection Panel",
-    "Storage Tank - Mains Water",
-    "Booster Unit - Mains Water",
-    "Storage Tank - Cold Water",
-    "Booster Unit - Cold Water",
-    "Storage Tank - Fire Hose Reel",
-    "Storage Tank - Rain Water",
-    "Rain Water Harvesting",
-    "Chiller",
-    "Chilled Water Buffer Tank",
-    "AHU",
-    "Extract Fan",
-    "Natural Ventilation",
-    "Metering",
-    "Generator",
-    "Unit Heater",
-    "Air Curtain",
-    "AC Units",
-    "Radiator Circuit",
-    "FCU (Fan Coil Unit)"
+    "Common LPHW Devices", "Hot Water Generator  No.1", "Boiler", "LPHW Pressurisation Unit",
+    "Dosing Unit", "Primary LPHW Single Pumps", "Calorifier", "Gas Detection Panel",
+    "Storage Tank - Mains Water", "Booster Unit - Mains Water", "Storage Tank - Cold Water",
+    "Booster Unit - Cold Water", "Storage Tank - Fire Hose Reel", "Storage Tank - Rain Water",
+    "Rain Water Harvesting", "Chiller", "Chilled Water Buffer Tank", "AHU", "Extract Fan",
+    "Natural Ventilation", "Metering", "Generator", "Unit Heater", "Air Curtain", "AC Units",
+    "Radiator Circuit", "FCU (Fan Coil Unit)"
 ]
 
 # CATALOGO FIJO PARA EL BOM
@@ -288,23 +287,33 @@ def procesar_archivos(json_data, nombre_proyecto):
         st.error(f"Error procesando el archivo: {e}")
         return None, None
 
-st.subheader("Project Details")
-col1, col2 = st.columns([1, 2])
-with col1:
-    project_name = st.text_input("Project Name (Header):", placeholder="e.g. IDA Cavan - Building 2")
-with col2:
-    project_description = st.text_area(
-        "Project Scope Description:", 
-        placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs."
-    )
+# --- 4. ZONA DE CAPTURA DE DATOS (CON DISEÑO) ---
+# Usamos un "expander" o un contenedor para que se vea como un formulario
+st.markdown("Project Details")
+with st.container():
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
+    with col2:
+        project_description = st.text_area(
+            "Engineering Scope:", 
+            placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs.",
+            height=100
+        )
 
-st.markdown("---")
+st.write("") # Espaciador
 
-if st.button("Generate Points List"):
+# Botón más estilizado
+col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+with col_btn2:
+    btn_generate = st.button("Analyze Scope & Generate Quotation", type="primary", use_container_width=True)
+
+if btn_generate:
     if not api_key or not project_description:
         st.warning("Please ensure you have entered your API Key and provided a project description.")
     else:
-        with st.spinner("Analyzing project scope and assigning quantities..."):
+        with st.status("AI Estimator is working...", expanded=True) as status:
+            st.write("Reading strict system rules...")
             prompt = f'''
             You are a BEMS Estimator. Read the user description and count how many of the ALLOWED SYSTEMS are needed.
             
@@ -322,12 +331,14 @@ if st.button("Generate Points List"):
             RETURN ONLY VALID JSON:
             '''
             try:
+                st.write("Extracting component quantities...")
                 response = model.generate_content(prompt)
                 json_text = response.text.strip().replace("```json", "").replace("```", "")
                 system_quantities = json.loads(json_text)
                 
                 st.session_state.materials_data = system_quantities 
                 
+                st.write("Building Excel Matrix and Formulas...")
                 buffer_full, buffer_filtrado = procesar_archivos(system_quantities, project_name)
                 
                 if buffer_full and buffer_filtrado:
@@ -337,88 +348,96 @@ if st.button("Generate Points List"):
                     st.session_state.nombre_archivo = f"Quotation_{project_name.replace(' ', '_')}.xlsx"
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
                     
-                    # Reseteamos los candados cada vez que se genera un proyecto nuevo
                     st.session_state.excel_revisado = False
                     st.session_state.autorizado = False 
+                    
+                    status.update(label="Process Complete!", state="complete", expanded=False)
 
             except Exception as e:
+                status.update(label="Process Failed", state="error", expanded=True)
                 st.error(f"Error AI/JSON: {e}")
 
-# --- SECCIÓN DE DESCARGAS Y VERIFICACIÓN ---
+# --- 5. SECCIÓN DE RESULTADOS Y DESCARGAS ---
 if st.session_state.generado:
-    st.success("Documents generated successfully!")
+    st.markdown("---")
+    st.markdown("Download Working Files")
+    st.info("The Excel files below contain all native formulas, prices, and formatting. **You must review the Quotation before generating the final PDF.**")
     
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
         st.download_button(
             "Download Official Quotation (Excel)", 
             data=st.session_state.buffer_full, 
             file_name=st.session_state.nombre_archivo, 
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=marcar_descargado
+            on_click=marcar_descargado,
+            use_container_width=True
         )
-    with col_btn2:
+    with col_d2:
         st.download_button(
-            "Download Bill of Materials (Excel)", 
+            "Download I/O Schedule (Excel)", 
             data=st.session_state.buffer_filtrado, 
             file_name=st.session_state.nombre_io, 
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
         )
     
-    st.markdown("---")
-    
-    # El candado mágico: Solo aparece si ya le dieron clic al Excel principal
+    # --- 6. LA BÓVEDA DEL JEFE ---
     if st.session_state.get("excel_revisado", False):
-        st.subheader("🔒 Manager Approval & Exact PDF Export")
-        st.info("Please ensure you have reviewed the Excel file. Enter authorization code to generate the final printable PDF.")
-        
-        col_pass, col_btn_auth = st.columns([2, 1])
-        with col_pass:
-            manager_password = st.text_input("Enter Authorization Code (Manager Only):", type="password")
-        
-        # CONTRASEÑA DEL JEFE
-        SECRET_PASSWORD = "DC-Boss2026" 
-        
-        with col_btn_auth:
-            st.write("") 
-            st.write("")
-            btn_authorize = st.button("Authorize & Unlock PDF")
+        st.markdown("---")
+        # Contenedor visual para que parezca una zona de seguridad
+        with st.container():
+            st.markdown("### 🔒 Management Authorization Vault")
+            st.warning("Releasing the final PDF implies the engineering scope has been verified.")
             
-        if btn_authorize:
-            if manager_password == SECRET_PASSWORD:
-                st.session_state.autorizado = True
-                st.success("✅ Quotation Verified and Authorized by Management.")
-            else:
-                st.error("❌ Invalid Authorization Code. Access Denied.")
-                st.session_state.autorizado = False
+            col_pass, col_btn_auth = st.columns([2, 1])
+            with col_pass:
+                manager_password = st.text_input("Manager Password:", type="password", placeholder="Enter authorization code")
+            
+            SECRET_PASSWORD = "DC-Boss2026" 
+            
+            with col_btn_auth:
+                st.write("") 
+                st.write("")
+                btn_authorize = st.button("Unlock PDF Export", use_container_width=True)
+                
+            if btn_authorize:
+                if manager_password == SECRET_PASSWORD:
+                    st.session_state.autorizado = True
+                    st.success("✅ Access Granted. You may now export the Official PDF.")
+                else:
+                    st.error("❌ Invalid Code. Access Denied.")
+                    st.session_state.autorizado = False
 
-        if st.session_state.get("autorizado", False):
-            with st.spinner("Converting exact Excel to PDF (This takes a few seconds)..."):
-                try:
-                    temp_excel_path = "temp_quotation.xlsx"
-                    with open(temp_excel_path, "wb") as f:
-                        f.write(st.session_state.buffer_full)
-                    
-                    comando = [
-                        "libreoffice", "--headless", "--convert-to", "pdf", 
-                        temp_excel_path, "--outdir", "."
-                    ]
-                    subprocess.run(comando, check=True)
-                    
-                    temp_pdf_path = "temp_quotation.pdf"
-                    with open(temp_pdf_path, "rb") as f:
-                        pdf_bytes = f.read()
+            if st.session_state.get("autorizado", False):
+                st.write("")
+                with st.spinner("Rendering high-fidelity PDF via LibreOffice Engine..."):
+                    try:
+                        temp_excel_path = "temp_quotation.xlsx"
+                        with open(temp_excel_path, "wb") as f:
+                            f.write(st.session_state.buffer_full)
                         
-                    os.remove(temp_excel_path)
-                    os.remove(temp_pdf_path)
-                    
-                    st.download_button(
-                        label="Download EXACT PDF for Printing",
-                        data=pdf_bytes,
-                        file_name=f"Approved_Quotation_{project_name.replace(' ', '_')}.pdf",
-                        mime="application/pdf",
-                        type="primary"
-                    )
-                except Exception as e:
-                    st.error("⚠️ Failed to generate PDF. Make sure 'libreoffice' is added to packages.txt in GitHub.")
-                    st.error(f"Detalle técnico: {e}")
+                        comando = [
+                            "libreoffice", "--headless", "--convert-to", "pdf", 
+                            temp_excel_path, "--outdir", "."
+                        ]
+                        subprocess.run(comando, check=True)
+                        
+                        temp_pdf_path = "temp_quotation.pdf"
+                        with open(temp_pdf_path, "rb") as f:
+                            pdf_bytes = f.read()
+                            
+                        os.remove(temp_excel_path)
+                        os.remove(temp_pdf_path)
+                        
+                        st.download_button(
+                            label="DOWNLOAD OFFICIAL PDF",
+                            data=pdf_bytes,
+                            file_name=f"Approved_Quotation_{project_name.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error("LibreOffice engine failed. Ensure 'libreoffice' is in packages.txt.")
+                        st.error(f"System Error: {e}")

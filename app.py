@@ -9,11 +9,9 @@ import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.worksheet.cell_range import CellRange
 from openpyxl.cell.cell import MergedCell
-from openpyxl.styles import PatternFill
 import subprocess
 import os
 
-# --- 1. CONFIGURACION DE PAGINA ---
 st.set_page_config(page_title="BEMS Estimator Pro | DC Controls", layout="wide")
 
 if "generado" not in st.session_state:
@@ -26,7 +24,6 @@ if "autorizado" not in st.session_state:
 def marcar_descargado():
     st.session_state.excel_revisado = True
 
-# --- 2. BARRA LATERAL (SIDEBAR) ---
 with st.sidebar:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
@@ -41,7 +38,6 @@ with st.sidebar:
     st.header("System Access")
     api_key = st.text_input("Enter API Key (Gemini):", type="password", help="Requires authorized Gemini API token.")
 
-# --- 3. ENCABEZADO PRINCIPAL ---
 st.markdown("<h1 style='text-align: center; color: #003366;'>Automated BEMS Quotation System</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; font-size: 18px; color: #555;'>AI-Powered I/O Schedule and Cost Estimator</p>", unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
@@ -50,15 +46,34 @@ if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-3.6-flash') 
 
-# === LISTA ESTRICTA DE SISTEMAS DEL TEMPLATE ===
 allowed_systems = [
-    "Common LPHW Devices", "Hot Water Generator  No.1", "Boiler", "LPHW Pressurisation Unit",
-    "Dosing Unit", "Primary LPHW Single Pumps", "Calorifier", "Gas Detection Panel",
-    "Storage Tank - Mains Water", "Booster Unit - Mains Water", "Storage Tank - Cold Water",
-    "Booster Unit - Cold Water", "Storage Tank - Fire Hose Reel", "Storage Tank - Rain Water",
-    "Rain Water Harvesting", "Chiller", "Chilled Water Buffer Tank", "AHU", "Extract Fan",
-    "Natural Ventilation", "Metering", "Generator", "Unit Heater", "Air Curtain", "AC Units",
-    "Radiator Circuit", "FCU (Fan Coil Unit)"
+    "Common LPHW Devices",
+    "Hot Water Generator  No.1",
+    "Boiler",
+    "LPHW Pressurisation Unit",
+    "Dosing Unit",
+    "Primary LPHW Single Pumps",
+    "Calorifier",
+    "Gas Detection Panel",
+    "Storage Tank - Mains Water",
+    "Booster Unit - Mains Water",
+    "Storage Tank - Cold Water",
+    "Booster Unit - Cold Water",
+    "Storage Tank - Fire Hose Reel",
+    "Storage Tank - Rain Water",
+    "Rain Water Harvesting",
+    "Chiller",
+    "Chilled Water Buffer Tank",
+    "AHU",
+    "Extract Fan",
+    "Natural Ventilation",
+    "Metering",
+    "Generator",
+    "Unit Heater",
+    "Air Curtain",
+    "AC Units",
+    "Radiator Circuit",
+    "FCU (Fan Coil Unit)"
 ]
 
 component_catalog = {
@@ -152,21 +167,8 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 
 def procesar_archivos(json_data, nombre_proyecto):
     try:
-        white_fill = PatternFill(start_color="FFFFFFFF", end_color="FFFFFFFF", fill_type="solid")
-
-        # --- 1. PROCESAR QUOTATION ---
         wb_quot = load_workbook("template_2.xlsx")
         ws_quot = wb_quot.active
-        
-        # 1. ENCENDEMOS LAS CELDAS PARA LA TABLA
-        ws_quot.print_options.gridLines = True
-        
-        # 2. PINTAMOS EL ENCABEZADO DE BLANCO PARA ELIMINAR CAJAS NEGRAS
-        for r in range(1, 6):
-            for c in range(1, 9): # Columnas A hasta H (Para no borrar el logo en I)
-                celda = ws_quot.cell(row=r, column=c)
-                if celda.fill.fill_type is None:
-                    celda.fill = white_fill
         
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
         ws_quot['C4'] = datetime.now().strftime("%d/%m/%Y")
@@ -199,59 +201,11 @@ def procesar_archivos(json_data, nombre_proyecto):
                 if "XXXX" in val or "??" in val:
                     cell.value = val.split(" - ")[0].strip()
 
-        # 3. OCULTAMOS EQUIPOS EN CERO PARA COMPACTAR EL PDF
-        r = 7
-        while r < req_row:
-            desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
-            part = str(ws_quot.cell(row=r, column=9).value or "").strip()
-            qty_val = ws_quot.cell(row=r, column=8).value
-            
-            if desc and not part:
-                has_qty = False
-                try:
-                    if qty_val and int(qty_val) > 0:
-                        has_qty = True
-                except (ValueError, TypeError):
-                    has_qty = False
-                
-                next_r = r + 1
-                while next_r < req_row:
-                    n_desc = str(ws_quot.cell(row=next_r, column=2).value or "").strip()
-                    n_part = str(ws_quot.cell(row=next_r, column=9).value or "").strip()
-                    if not n_desc:
-                        next_r += 1
-                        break
-                    if not n_part and ws_quot.cell(row=next_r, column=8).value is not None:
-                        break
-                    next_r += 1
-                
-                if not has_qty:
-                    for hide_idx in range(r, next_r):
-                        ws_quot.row_dimensions[hide_idx].hidden = True
-                else:
-                    for show_idx in range(r, next_r):
-                        ws_quot.row_dimensions[show_idx].hidden = False
-                r = next_r
-            else:
-                r += 1
-
-        ws_quot.page_setup.fitToWidth = 1
-        ws_quot.page_setup.fitToHeight = 0
-        ws_quot.sheet_properties.pageSetUpPr.fitToPage = True
-
         buf_quot = io.BytesIO()
         wb_quot.save(buf_quot)
 
-        # --- 4. PROCESAR BOM ---
         wb_bom = load_workbook("template_2.xlsx")
         ws_bom = wb_bom.active
-        
-        ws_bom.print_options.gridLines = True
-        for r in range(1, 6):
-            for c in range(1, 9):
-                celda = ws_bom.cell(row=r, column=c)
-                if celda.fill.fill_type is None:
-                    celda.fill = white_fill
         
         ws_bom['B1'] = f"Project: {nombre_proyecto}"
         ws_bom['C4'] = datetime.now().strftime("%d/%m/%Y")
@@ -344,7 +298,6 @@ def procesar_archivos(json_data, nombre_proyecto):
         st.error(f"Error procesando el archivo: {e}")
         return None, None
 
-# --- 5. ENTRADA DE DATOS DEL PROYECTO ---
 st.markdown("### Project Details")
 with st.container():
     col1, col2 = st.columns([1, 2])
@@ -412,7 +365,6 @@ if btn_generate:
                 status.update(label="Process Failed", state="error", expanded=True)
                 st.error(f"Error AI/JSON: {e}")
 
-# --- 6. SECCION DE RESULTADOS Y DESCARGAS ---
 if st.session_state.generado:
     st.markdown("---")
     st.markdown("### Download Working Files")
@@ -437,7 +389,6 @@ if st.session_state.generado:
             use_container_width=True
         )
     
-    # --- 7. AUTORIZACION Y EXPORTACION A PDF ---
     if st.session_state.get("excel_revisado", False):
         st.markdown("---")
         with st.container():

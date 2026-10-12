@@ -13,6 +13,11 @@ st.set_page_config(page_title="BEMS Estimator Pro | DC Controls", layout="wide")
 
 if "generado" not in st.session_state:
     st.session_state.generado = False
+if "excel_revisado" not in st.session_state:
+    st.session_state.excel_revisado = False
+
+def marcar_descargado():
+    st.session_state.excel_revisado = True
 
 # --- 2. BARRA LATERAL ---
 with st.sidebar:
@@ -170,6 +175,10 @@ def procesar_archivos(json_data, nombre_proyecto):
                 if "XXXX" in val or "??" in val:
                     cell.value = val.split(" - ")[0].strip()
 
+        # Guardar la versión FULL (con ceros) antes de borrar nada
+        buf_quot_full = io.BytesIO()
+        wb_quot.save(buf_quot_full)
+
         # --- 2. PROCESAR BOM ---
         wb_bom = load_workbook("template_2.xlsx")
         ws_bom = wb_bom.active
@@ -257,7 +266,10 @@ def procesar_archivos(json_data, nombre_proyecto):
                 if mcr.min_row >= delete_start: ws_bom.merged_cells.remove(mcr)
             ws_bom.delete_rows(idx=delete_start, amount=delete_amount)
 
-        # --- 3. LIMPIEZA FINAL DEL QUOTATION (Eliminar bloques en cero) ---
+        buf_bom = io.BytesIO()
+        wb_bom.save(buf_bom)
+
+        # --- 3. LIMPIEZA FINAL DEL QUOTATION (Eliminar bloques en cero para versión "Clean") ---
         system_to_row = {}
         row_to_system = {}
         for sys in allowed_systems:
@@ -287,21 +299,18 @@ def procesar_archivos(json_data, nombre_proyecto):
                     
             rows_to_keep.update(range(req_row, ws_quot.max_row + 1))
             
-            # Borrar filas de abajo hacia arriba para no romper los índices
             for r in range(ws_quot.max_row, 0, -1):
                 if r not in rows_to_keep:
                     ws_quot.delete_rows(r, 1)
 
-        buf_quot = io.BytesIO()
-        wb_quot.save(buf_quot)
-        buf_bom = io.BytesIO()
-        wb_bom.save(buf_bom)
+        buf_quot_clean = io.BytesIO()
+        wb_quot.save(buf_quot_clean)
         
-        return buf_quot.getvalue(), buf_bom.getvalue()
+        return buf_quot_full.getvalue(), buf_bom.getvalue(), buf_quot_clean.getvalue()
         
     except Exception as e:
         st.error(f"Error procesando el archivo: {e}")
-        return None, None
+        return None, None, None
 
 # --- 4. ENTRADA DE DATOS DEL PROYECTO ---
 st.markdown("### Project Details")
@@ -350,15 +359,18 @@ if btn_generate:
                 
                 st.session_state.materials_data = system_quantities 
                 
-                buffer_full, buffer_filtrado = procesar_archivos(system_quantities, project_name)
+                buffer_full, buffer_bom, buffer_clean = procesar_archivos(system_quantities, project_name)
                 
-                if buffer_full and buffer_filtrado:
+                if buffer_full and buffer_bom and buffer_clean:
                     st.session_state.generado = True
                     st.session_state.buffer_full = buffer_full
-                    st.session_state.buffer_filtrado = buffer_filtrado
-                    st.session_state.nombre_archivo = f"Quotation_{project_name.replace(' ', '_')}.xlsx"
+                    st.session_state.buffer_bom = buffer_bom
+                    st.session_state.buffer_clean = buffer_clean
+                    st.session_state.nombre_full = f"Quotation_Review_{project_name.replace(' ', '_')}.xlsx"
+                    st.session_state.nombre_clean = f"Clean_Quotation_{project_name.replace(' ', '_')}.xlsx"
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
                     
+                    st.session_state.excel_revisado = False
                     status.update(label="Process Complete!", state="complete", expanded=False)
 
             except Exception as e:
@@ -368,23 +380,38 @@ if btn_generate:
 # --- 5. RESULTADOS Y DESCARGAS ---
 if st.session_state.generado:
     st.markdown("---")
-    st.markdown("### Download Official Files")
-    st.info("The Excel files are fully cleaned. Only the required systems are included.")
+    st.markdown("### Step 1: Review Working Files")
+    st.info("Download the full Quotation (including 0s) to review the logic and the I/O Schedule.")
     
     col_d1, col_d2 = st.columns(2)
     with col_d1:
         st.download_button(
-            "Download Clean Quotation (Excel)", 
+            "Download Quotation (Full/Review)", 
             data=st.session_state.buffer_full, 
-            file_name=st.session_state.nombre_archivo, 
+            file_name=st.session_state.nombre_full, 
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            on_click=marcar_descargado,
             use_container_width=True
         )
     with col_d2:
         st.download_button(
             "Download I/O Schedule (Excel)", 
-            data=st.session_state.buffer_filtrado, 
+            data=st.session_state.buffer_bom, 
             file_name=st.session_state.nombre_io, 
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    
+    if st.session_state.get("excel_revisado", False):
+        st.markdown("---")
+        st.markdown("### Step 2: Client-Ready Document")
+        st.success("The clean quotation is ready. All empty systems have been automatically removed.")
+        
+        st.download_button(
+            label="DOWNLOAD CLEAN QUOTATION",
+            data=st.session_state.buffer_clean,
+            file_name=st.session_state.nombre_clean,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
             use_container_width=True
         )

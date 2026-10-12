@@ -7,34 +7,18 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
-import subprocess
-import os
 
 # --- 1. CONFIGURACION DE PAGINA ---
 st.set_page_config(page_title="BEMS Estimator Pro | DC Controls", layout="wide")
 
 if "generado" not in st.session_state:
     st.session_state.generado = False
-if "excel_revisado" not in st.session_state:
-    st.session_state.excel_revisado = False
-if "autorizado" not in st.session_state:
-    st.session_state.autorizado = False
-
-def marcar_descargado():
-    st.session_state.excel_revisado = True
 
 # --- 2. BARRA LATERAL ---
 with st.sidebar:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", use_container_width=True)
-    elif os.path.exists("logo.jpg"):
-        st.image("logo.jpg", use_container_width=True)
-    else:
-        st.markdown("<h2 style='text-align: center; color: #003366;'>DC CONTROLS</h2>", unsafe_allow_html=True)
-        
+    st.markdown("<h2 style='text-align: center; color: #003366;'>DC CONTROLS</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: gray;'>BEMS Estimation Engine</p>", unsafe_allow_html=True)
     st.markdown("---")
-    
     st.header("System Access")
     api_key = st.text_input("Enter API Key (Gemini):", type="password", help="Requires authorized Gemini API token.")
 
@@ -149,8 +133,8 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 
 def procesar_archivos(json_data, nombre_proyecto):
     try:
-        # --- 1. PROCESAR QUOTATION (EXCEL PURO PARA DESCARGAR) ---
-        wb_quot = load_workbook("template_2.xlsx")
+        # --- 1. PROCESAR QUOTATION ---
+        wb_quot = load_workbook("template_2_2.xlsx")
         ws_quot = wb_quot.active
         
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
@@ -186,11 +170,8 @@ def procesar_archivos(json_data, nombre_proyecto):
                 if "XXXX" in val or "??" in val:
                     cell.value = val.split(" - ")[0].strip()
 
-        buf_quot = io.BytesIO()
-        wb_quot.save(buf_quot)
-
         # --- 2. PROCESAR BOM ---
-        wb_bom = load_workbook("template_2.xlsx")
+        wb_bom = load_workbook("template_2_2.xlsx")
         ws_bom = wb_bom.active
         
         ws_bom['B1'] = f"Project: {nombre_proyecto}"
@@ -270,13 +251,49 @@ def procesar_archivos(json_data, nombre_proyecto):
             current_row += 1
 
         delete_start = current_row
-        ws_bom.print_area = ""
         delete_amount = ws_bom.max_row - delete_start + 1
         if delete_amount > 0:
             for mcr in list(ws_bom.merged_cells.ranges):
                 if mcr.min_row >= delete_start: ws_bom.merged_cells.remove(mcr)
             ws_bom.delete_rows(idx=delete_start, amount=delete_amount)
 
+        # --- 3. LIMPIEZA FINAL DEL QUOTATION (Eliminar bloques en cero) ---
+        system_to_row = {}
+        row_to_system = {}
+        for sys in allowed_systems:
+            r_match = match_native_row(sys, ws_quot)
+            if r_match:
+                system_to_row[sys] = r_match
+                row_to_system[r_match] = sys
+                
+        all_parent_rows = sorted(list(row_to_system.keys()))
+        
+        if all_parent_rows:
+            rows_to_keep = set(range(1, all_parent_rows[0])) 
+            for i, p_row in enumerate(all_parent_rows):
+                sys = row_to_system[p_row]
+                
+                qty = 0
+                for k, v in json_data.items():
+                    if k.lower() == sys.lower():
+                        try: qty = int(v)
+                        except: qty = 0
+                        break
+                
+                next_r = all_parent_rows[i+1] if i+1 < len(all_parent_rows) else req_row
+                
+                if qty > 0:
+                    rows_to_keep.update(range(p_row, next_r))
+                    
+            rows_to_keep.update(range(req_row, ws_quot.max_row + 1))
+            
+            # Borrar filas de abajo hacia arriba para no romper los índices
+            for r in range(ws_quot.max_row, 0, -1):
+                if r not in rows_to_keep:
+                    ws_quot.delete_rows(r, 1)
+
+        buf_quot = io.BytesIO()
+        wb_quot.save(buf_quot)
         buf_bom = io.BytesIO()
         wb_bom.save(buf_bom)
         
@@ -342,9 +359,6 @@ if btn_generate:
                     st.session_state.nombre_archivo = f"Quotation_{project_name.replace(' ', '_')}.xlsx"
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
                     
-                    st.session_state.excel_revisado = False
-                    st.session_state.autorizado = False 
-                    
                     status.update(label="Process Complete!", state="complete", expanded=False)
 
             except Exception as e:
@@ -354,16 +368,16 @@ if btn_generate:
 # --- 5. RESULTADOS Y DESCARGAS ---
 if st.session_state.generado:
     st.markdown("---")
-    st.markdown("### Download Working Files")
+    st.markdown("### Download Official Files")
+    st.info("The Excel files are fully cleaned. Only the required systems are included.")
     
     col_d1, col_d2 = st.columns(2)
     with col_d1:
         st.download_button(
-            "Download Official Quotation (Excel)", 
+            "Download Clean Quotation (Excel)", 
             data=st.session_state.buffer_full, 
             file_name=st.session_state.nombre_archivo, 
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            on_click=marcar_descargado,
             use_container_width=True
         )
     with col_d2:
@@ -374,61 +388,3 @@ if st.session_state.generado:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
-    
-    if st.session_state.get("excel_revisado", False):
-        st.markdown("---")
-        with st.container():
-            st.markdown("### Management Authorization Vault")
-            
-            col_pass, col_btn_auth = st.columns([2, 1])
-            with col_pass:
-                manager_password = st.text_input("Manager Password:", type="password", placeholder="Enter authorization code")
-            
-            SECRET_PASSWORD = "DC-Boss2026" 
-            
-            with col_btn_auth:
-                st.write("") 
-                st.write("")
-                btn_authorize = st.button("Unlock PDF Export", use_container_width=True)
-                
-            if btn_authorize:
-                if manager_password == SECRET_PASSWORD:
-                    st.session_state.autorizado = True
-                    st.success("Access Granted. You may now export the Official PDF.")
-                else:
-                    st.error("Invalid Code. Access Denied.")
-                    st.session_state.autorizado = False
-
-            if st.session_state.get("autorizado", False):
-                st.write("")
-                with st.spinner("Rendering high-fidelity PDF via LibreOffice Engine..."):
-                    try:
-                        # DESCARGA DIRECTA DEL BUFFER (Cero alteraciones por openpyxl)
-                        temp_excel_path = "temp_quotation.xlsx"
-                        with open(temp_excel_path, "wb") as f:
-                            f.write(st.session_state.buffer_full)
-                        
-                        # Comando puro de LibreOffice
-                        comando = [
-                            "libreoffice", "--headless", "--convert-to", "pdf", 
-                            temp_excel_path, "--outdir", "."
-                        ]
-                        subprocess.run(comando, check=True)
-                        
-                        temp_pdf_path = "temp_quotation.pdf"
-                        with open(temp_pdf_path, "rb") as f:
-                            pdf_bytes = f.read()
-                            
-                        os.remove(temp_excel_path)
-                        os.remove(temp_pdf_path)
-                        
-                        st.download_button(
-                            label="DOWNLOAD OFFICIAL PDF",
-                            data=pdf_bytes,
-                            file_name=f"Approved_Quotation_{project_name.replace(' ', '_')}.pdf",
-                            mime="application/pdf",
-                            type="primary",
-                            use_container_width=True
-                        )
-                    except Exception as e:
-                        st.error(f"System Error: {e}")

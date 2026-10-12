@@ -45,7 +45,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 
 # === LISTA DE SISTEMAS ===
 allowed_systems = [
@@ -149,7 +149,7 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 
 def procesar_archivos(json_data, nombre_proyecto):
     try:
-        # --- 1. PROCESAR QUOTATION ---
+        # --- 1. PROCESAR QUOTATION (EXCEL PURO PARA DESCARGAR) ---
         wb_quot = load_workbook("template_2.xlsx")
         ws_quot = wb_quot.active
         
@@ -403,23 +403,12 @@ if st.session_state.generado:
                 st.write("")
                 with st.spinner("Rendering high-fidelity PDF via LibreOffice Engine..."):
                     try:
-                        # Cargar el Excel generado en memoria
-                        wb_pdf = load_workbook(io.BytesIO(st.session_state.buffer_full))
-                        ws_pdf = wb_pdf.active
-                        
-                        # HEREDAR DIRECTAMENTE LOS PARÁMETROS DE IMPRESIÓN DEL TEMPLATE NATIVO
-                        wb_orig = load_workbook("template_2.xlsx")
-                        ws_orig = wb_orig.active
-                        
-                        ws_pdf.page_setup.orientation = ws_orig.page_setup.orientation
-                        ws_pdf.page_setup.paperSize = ws_orig.page_setup.paperSize
-                        ws_pdf.page_setup.scale = ws_orig.page_setup.scale
-                        ws_pdf.print_area = ws_orig.print_area
-                        ws_pdf.print_options.gridLines = ws_orig.print_options.gridLines
-
+                        # DESCARGA DIRECTA DEL BUFFER (Cero alteraciones por openpyxl)
                         temp_excel_path = "temp_quotation.xlsx"
-                        wb_pdf.save(temp_excel_path)
+                        with open(temp_excel_path, "wb") as f:
+                            f.write(st.session_state.buffer_full)
                         
+                        # Comando puro de LibreOffice
                         comando = [
                             "libreoffice", "--headless", "--convert-to", "pdf", 
                             temp_excel_path, "--outdir", "."
@@ -442,4 +431,4 @@ if st.session_state.generado:
                             use_container_width=True
                         )
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error(f"System Error: {e}")

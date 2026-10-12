@@ -134,7 +134,7 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 def procesar_archivos(json_data, nombre_proyecto):
     try:
         # --- 1. PROCESAR QUOTATION ---
-        wb_quot = load_workbook("template_2_2.xlsx")
+        wb_quot = load_workbook("template_2.xlsx")
         ws_quot = wb_quot.active
         
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
@@ -171,7 +171,7 @@ def procesar_archivos(json_data, nombre_proyecto):
                     cell.value = val.split(" - ")[0].strip()
 
         # --- 2. PROCESAR BOM ---
-        wb_bom = load_workbook("template_2_2.xlsx")
+        wb_bom = load_workbook("template_2.xlsx")
         ws_bom = wb_bom.active
         
         ws_bom['B1'] = f"Project: {nombre_proyecto}"

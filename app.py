@@ -86,12 +86,12 @@ component_catalog = {
     "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Chiller Enable and Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Enable and Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 1, "Labour": 50},
     "Radiator Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Radiator Flow Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Radiator Return Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Radiator Return Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Radiator Control Valve Actuator": {"Part": "Valve 25mm", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
 }
 
@@ -132,7 +132,7 @@ def match_native_row(sys_name, ws):
         if "chiller" in s and "chiller" == desc: return r
         if "extract fan" in s and "extract fan" in desc: return r
         if "metering" in s and "metering" in desc: return r
-        if "radiator" in s and "radiator" in desc: return r
+        if "radiator" in s and "radiator" == desc: return r
     return None
 
 def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es_padre=False):
@@ -178,7 +178,7 @@ def procesar_archivos(json_data, nombre_proyecto):
             if not isinstance(cell, MergedCell): 
                 cell.value = None
 
-        # INYECCIÓN INTELIGENTE DE BOMBAS Y CALDERAS
+        # INYECCIÓN INTELIGENTE DE BOMBAS, CALDERAS Y METERING (Asegurando valor 1)
         has_chiller = False
         has_boiler = False
         for k, v in json_data.items():
@@ -193,6 +193,8 @@ def procesar_archivos(json_data, nombre_proyecto):
         if has_boiler:
             if "Common LPHW Devices" not in json_data or json_data["Common LPHW Devices"] == 0:
                 json_data["Common LPHW Devices"] = 1
+                
+        json_data["Metering"] = 1 # Metering siempre activo con valor 1
 
         for sys_name, qty in json_data.items():
             if qty <= 0: continue
@@ -359,7 +361,6 @@ def procesar_archivos(json_data, nombre_proyecto):
             elif desc and is_bold and not prev_desc:
                 is_main_system = True
                 
-            # Excepciones: Las bombas del Chiller están en negritas pero son sub-sistemas
             if "primary chw pump" in desc.lower():
                 is_main_system = False
                 
@@ -372,7 +373,6 @@ def procesar_archivos(json_data, nombre_proyecto):
                 except:
                     pass
             
-            # EXCEPCIÓN BLINDADA: Nunca ocultar Fire Alarm ni Metering
             if "Fire Alarm Interface" in desc or "Metering" in desc or "Pulsed Input" in desc:
                 current_block_keep = True
             

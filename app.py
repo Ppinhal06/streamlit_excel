@@ -7,6 +7,7 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
+import os
 
 # --- 1. CONFIGURACION DE PAGINA ---
 st.set_page_config(page_title="BEMS Estimator Pro | DC Controls", layout="wide")
@@ -21,9 +22,16 @@ def marcar_descargado():
 
 # --- 2. BARRA LATERAL ---
 with st.sidebar:
-    st.markdown("<h2 style='text-align: center; color: #003366;'>DC CONTROLS</h2>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    elif os.path.exists("logo.jpg"):
+        st.image("logo.jpg", use_container_width=True)
+    else:
+        st.markdown("<h2 style='text-align: center; color: #003366;'>DC CONTROLS</h2>", unsafe_allow_html=True)
+        
     st.markdown("<p style='text-align: center; color: gray;'>BEMS Estimation Engine</p>", unsafe_allow_html=True)
     st.markdown("---")
+    
     st.header("System Access")
     api_key = st.text_input("Enter API Key (Gemini):", type="password", help="Requires authorized Gemini API token.")
 
@@ -138,7 +146,7 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 
 def procesar_archivos(json_data, nombre_proyecto):
     try:
-        # --- 1. PROCESAR QUOTATION ---
+        # --- 1. PROCESAR QUOTATION (EXCEL COMPLETO) ---
         wb_quot = load_workbook("template_2.xlsx")
         ws_quot = wb_quot.active
         
@@ -175,7 +183,7 @@ def procesar_archivos(json_data, nombre_proyecto):
                 if "XXXX" in val or "??" in val:
                     cell.value = val.split(" - ")[0].strip()
 
-        # Guardar la versión FULL (con ceros) antes de borrar nada
+        # Guardar la versión FULL
         buf_quot_full = io.BytesIO()
         wb_quot.save(buf_quot_full)
 
@@ -270,10 +278,14 @@ def procesar_archivos(json_data, nombre_proyecto):
         wb_bom.save(buf_bom)
 
         # --- 3. LIMPIEZA FINAL DEL QUOTATION (Eliminar bloques en cero para versión "Clean") ---
+        # Cargamos una copia fresca desde el buffer para evitar el I/O error
+        wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
+        ws_clean = wb_clean.active
+
         system_to_row = {}
         row_to_system = {}
         for sys in allowed_systems:
-            r_match = match_native_row(sys, ws_quot)
+            r_match = match_native_row(sys, ws_clean)
             if r_match:
                 system_to_row[sys] = r_match
                 row_to_system[r_match] = sys
@@ -297,14 +309,15 @@ def procesar_archivos(json_data, nombre_proyecto):
                 if qty > 0:
                     rows_to_keep.update(range(p_row, next_r))
                     
-            rows_to_keep.update(range(req_row, ws_quot.max_row + 1))
+            rows_to_keep.update(range(req_row, ws_clean.max_row + 1))
             
-            for r in range(ws_quot.max_row, 0, -1):
+            # Se borran las filas de abajo hacia arriba
+            for r in range(ws_clean.max_row, 0, -1):
                 if r not in rows_to_keep:
-                    ws_quot.delete_rows(r, 1)
+                    ws_clean.delete_rows(r, 1)
 
         buf_quot_clean = io.BytesIO()
-        wb_quot.save(buf_quot_clean)
+        wb_clean.save(buf_quot_clean)
         
         return buf_quot_full.getvalue(), buf_bom.getvalue(), buf_quot_clean.getvalue()
         
@@ -402,6 +415,7 @@ if st.session_state.generado:
             use_container_width=True
         )
     
+    # Tan pronto se descargue el primero, aparece el segundo (Sin contraseñas)
     if st.session_state.get("excel_revisado", False):
         st.markdown("---")
         st.markdown("### Step 2: Client-Ready Document")

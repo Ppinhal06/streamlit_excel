@@ -147,6 +147,7 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 def procesar_archivos(json_data, nombre_proyecto):
     try:
         # --- 1. PROCESAR QUOTATION (EXCEL COMPLETO) ---
+        # Asegúrate que el nombre coincida con tu archivo local ("template_2.xlsx" o "template_2_2.xlsx")
         wb_quot = load_workbook("template_2.xlsx")
         ws_quot = wb_quot.active
         
@@ -278,52 +279,33 @@ def procesar_archivos(json_data, nombre_proyecto):
         wb_bom.save(buf_bom)
 
         # --- 3. LIMPIEZA FINAL DEL QUOTATION (Ocultar bloques en cero para versión "Clean") ---
+        # Cargamos una copia fresca desde el buffer para evitar el I/O error y proteger las fórmulas
         wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
         ws_clean = wb_clean.active
 
-        # Barrido inteligente de bloques de arriba hacia abajo
-        r = 7
-        while r < req_row:
-            desc = str(ws_clean.cell(row=r, column=2).value or "").strip()
-            part = str(ws_clean.cell(row=r, column=9).value or "").strip()
+        # Estado inicial: Mantener visible por si hay texto antes del primer bloque
+        current_block_keep = True
+        
+        for r in range(7, req_row):
+            c_b = ws_clean.cell(row=r, column=2)
+            desc = str(c_b.value or "").strip()
             
-            # ¿Es el encabezado de un sistema? (Tiene descripción pero NO número de parte)
-            if desc and not part:
+            # EL DETECTOR DE SISTEMAS: Busca la letra en Negritas
+            is_bold = c_b.font and c_b.font.bold
+            
+            if desc and is_bold:
                 qty_val = ws_clean.cell(row=r, column=8).value
-                keep_block = False
+                current_block_keep = False # Asumimos que no lo ocupamos hasta verificar cantidad
                 try:
+                    # Si el padre tiene cantidad, salvamos a la familia entera
                     if qty_val is not None and int(float(qty_val)) > 0:
-                        keep_block = True
+                        current_block_keep = True
                 except:
                     pass
-                
-                # Ocultar el encabezado si la cantidad es 0 o vacía
-                if not keep_block:
-                    ws_clean.row_dimensions[r].hidden = True
-                    
-                # Avanzamos a los "hijos" y espacios en blanco debajo de este sistema
-                next_r = r + 1
-                while next_r < req_row:
-                    n_desc = str(ws_clean.cell(row=next_r, column=2).value or "").strip()
-                    n_part = str(ws_clean.cell(row=next_r, column=9).value or "").strip()
-                    
-                    # Si encontramos el siguiente encabezado de sistema, rompemos el ciclo
-                    if n_desc and not n_part:
-                        break
-                        
-                    # Si el bloque entero no se ocupa, ocultamos también a este hijo
-                    if not keep_block:
-                        ws_clean.row_dimensions[next_r].hidden = True
-                        
-                    next_r += 1
-                
-                # Brincamos al siguiente bloque encontrado
-                r = next_r
-            else:
-                # Si por alguna razón hay filas sueltas/vacías antes del primer sistema, las ocultamos
-                if not desc and not part:
-                    ws_clean.row_dimensions[r].hidden = True
-                r += 1
+            
+            # Ocultamos la fila entera si su sistema padre fue marcado como invisible
+            if not current_block_keep:
+                ws_clean.row_dimensions[r].hidden = True
 
         buf_quot_clean = io.BytesIO()
         wb_clean.save(buf_quot_clean)
@@ -424,6 +406,7 @@ if st.session_state.generado:
             use_container_width=True
         )
     
+    # Tan pronto se descargue el primero, aparece el segundo (Sin contraseñas)
     if st.session_state.get("excel_revisado", False):
         st.markdown("---")
         st.markdown("### Step 2: Client-Ready Document")

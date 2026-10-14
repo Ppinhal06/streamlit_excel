@@ -50,7 +50,8 @@ allowed_systems = [
     "Dosing Unit", "Primary LPHW Single Pumps", "Calorifier", "Gas Detection Panel",
     "Storage Tank - Mains Water", "Booster Unit - Mains Water", "Storage Tank - Cold Water",
     "Booster Unit - Cold Water", "Storage Tank - Fire Hose Reel", "Storage Tank - Rain Water",
-    "Rain Water Harvesting", "Chiller", "Chilled Water Buffer Tank", "AHU", "Extract Fan",
+    "Rain Water Harvesting", "Chiller", "Primary CHW Pump A", "Primary CHW Pump B", 
+    "CHW Pressurisation Unit", "Chilled Water Buffer Tank", "AHU", "Extract Fan",
     "Natural Ventilation", "Metering", "Generator", "Unit Heater", "Air Curtain", "AC Units",
     "Radiator Circuit", "FCU (Fan Coil Unit)"
 ]
@@ -406,8 +407,9 @@ if btn_generate:
             RULES:
             1. ONLY output a JSON dictionary mapping the EXACT system name from the list to its integer quantity.
             2. DO NOT output children or points. JUST the system name and quantity.
-            3. If a system requires common heating devices (e.g. Boilers), add "Common LPHW Devices": 1 to the JSON.
-            4. ONLY use names exactly as they appear in the ALLOWED SYSTEMS list. DO NOT invent names or categories.
+            3. If the user mentions Boilers or LPHW Heating, add "Common LPHW Devices": 1 to the JSON.
+            4. If the user mentions Chillers, ALWAYS add "Primary CHW Pump A": 1 AND "Primary CHW Pump B": 1 to the JSON.
+            5. ONLY use names exactly as they appear in the ALLOWED SYSTEMS list. DO NOT invent names or categories.
             
             User Description: "{project_description}"
             

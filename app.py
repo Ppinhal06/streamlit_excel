@@ -87,7 +87,7 @@ component_catalog = {
     "Chiller Enable and Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Enable and Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 1, "Labour": 50},
     "Radiator Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Radiator Flow Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
@@ -105,11 +105,8 @@ def get_catalog_match(desc, part):
     if "space temperature" in d or "room temp" in d: return component_catalog["Space Temperature Sensor"]
     if "control valve" in d or "actuator" in d: return {"Part": part if part else "Valve", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
     if "enable" in d: return {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50}
-    
-    # REGLAS PARA I/O SCHEDULE (FIRE ALARM Y METERING)
     if "fire alarm interface" in d: return {"Part": part if part else "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
     if "pulsed input" in d or "meter" in d: return {"Part": part if part else "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
-    
     if "fault" in d or "status" in d or "switch" in d: return {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
     if "variable speed" in d or "vsd" in d: return {"Part": "VSD", "AI": 0, "AO": 1, "DI": 1, "DO": 1, "Labour": 50}
     if "control signal" in d: return {"Part": "0...10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
@@ -135,7 +132,7 @@ def match_native_row(sys_name, ws):
         if "chiller" in s and "chiller" == desc: return r
         if "extract fan" in s and "extract fan" in desc: return r
         if "metering" in s and "metering" in desc: return r
-        if "radiator" in s and "radiator" in desc: return r
+        if "radiator" in s and "radiator" == desc: return r
     return None
 
 def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es_padre=False):
@@ -181,7 +178,7 @@ def procesar_archivos(json_data, nombre_proyecto):
             if not isinstance(cell, MergedCell): 
                 cell.value = None
 
-        # INYECCIÓN INTELIGENTE POR CÓDIGO (Chiller, Boiler y Metering obligatorios)
+        # INYECCIÓN INTELIGENTE DE BOMBAS Y CALDERAS
         has_chiller = False
         has_boiler = False
         for k, v in json_data.items():
@@ -196,26 +193,12 @@ def procesar_archivos(json_data, nombre_proyecto):
         if has_boiler:
             if "Common LPHW Devices" not in json_data or json_data["Common LPHW Devices"] == 0:
                 json_data["Common LPHW Devices"] = 1
-                
-        # Forzar Metering siempre activo por defecto
-        json_data["Metering"] = 1
 
         for sys_name, qty in json_data.items():
             if qty <= 0: continue
             match_r = match_native_row(sys_name, ws_quot)
             if match_r:
                 ws_quot.cell(row=match_r, column=8).value = qty
-
-        # INYECCIÓN EXTREMA OBLIGATORIA DE SEGURIDAD (Fire Alarm y Metering Hijos)
-        for r in range(7, req_row):
-            desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
-            if "Fire Alarm Interface" in desc:
-                ws_quot.cell(row=r, column=8).value = 1 
-                ws_quot.cell(row=r, column=5).value = 1 
-                ws_quot.cell(row=r, column=10).value = f"=SUM(E{r})*150"
-                ws_quot.cell(row=r, column=12).value = f"=SUM(C{r}:F{r})*50"
-            elif "Pulsed Input" in desc: # Gas, Water, Electric Meters
-                ws_quot.cell(row=r, column=5).value = f"=H{r}"
 
         for r in range(7, req_row):
             cell = ws_quot.cell(row=r, column=2)
@@ -388,7 +371,7 @@ def procesar_archivos(json_data, nombre_proyecto):
                 except:
                     pass
             
-            # EXCEPCIONES DE VIDA O MUERTE: Nunca ocultar Fire Alarm ni Metering
+            # EXCEPCIONES DE VISIBILIDAD: Dejar intactos Fire Alarm y Metering (controlados por Excel)
             if "Fire Alarm Interface" in desc or "Metering" in desc or "Pulsed Input" in desc:
                 current_block_keep = True
             

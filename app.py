@@ -42,7 +42,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 
 # === LISTA DE SISTEMAS ===
 allowed_systems = [
@@ -86,12 +86,12 @@ component_catalog = {
     "Frost Stat": {"Part": "DBET-23U", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Chiller Enable and Status": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Chiller Flow Switch": {"Part": "FS 541", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
-    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Chiller Flow Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
+    "Chiller Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Enable and Current Switch": {"Part": "RIBXKTF", "AI": 0, "AO": 0, "DI": 1, "DO": 1, "Labour": 50},
     "Radiator Enable": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50},
     "Radiator Flow Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "Radiator Return Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "Radiator Return Temp Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Radiator Control Valve Actuator": {"Part": "Valve 25mm", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
 }
 
@@ -359,6 +359,7 @@ def procesar_archivos(json_data, nombre_proyecto):
             elif desc and is_bold and not prev_desc:
                 is_main_system = True
                 
+            # Excepciones: Las bombas del Chiller están en negritas pero son sub-sistemas
             if "primary chw pump" in desc.lower():
                 is_main_system = False
                 
@@ -371,7 +372,7 @@ def procesar_archivos(json_data, nombre_proyecto):
                 except:
                     pass
             
-            # EXCEPCIONES BLINDADAS: Fire Alarm y Metering nunca se ocultan por valor vacío
+            # EXCEPCIÓN BLINDADA: Nunca ocultar Fire Alarm ni Metering
             if "Fire Alarm Interface" in desc or "Metering" in desc or "Pulsed Input" in desc:
                 current_block_keep = True
             

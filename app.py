@@ -147,8 +147,7 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 def procesar_archivos(json_data, nombre_proyecto):
     try:
         # --- 1. PROCESAR QUOTATION (EXCEL COMPLETO) ---
-        # Asegúrate que el nombre coincida con tu archivo local ("template_2.xlsx" o "template_2_2.xlsx")
-        wb_quot = load_workbook("template_2.xlsx")
+        wb_quot = load_workbook("template_2.xlsx") # Reemplaza por "template_2_2.xlsx" si usas el nuevo
         ws_quot = wb_quot.active
         
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
@@ -177,6 +176,13 @@ def procesar_archivos(json_data, nombre_proyecto):
                     if "chiller mains" in next_desc:
                         ws_quot.cell(row=match_r + 1, column=8).value = qty
 
+        # INYECCIÓN OBLIGATORIA DE SEGURIDAD (Fire Alarm Interface = 1)
+        for r in range(7, req_row):
+            desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
+            if "Fire Alarm Interface" in desc:
+                ws_quot.cell(row=r, column=8).value = 1
+                break
+
         for r in range(7, req_row):
             cell = ws_quot.cell(row=r, column=2)
             if not isinstance(cell, MergedCell):
@@ -184,7 +190,6 @@ def procesar_archivos(json_data, nombre_proyecto):
                 if "XXXX" in val or "??" in val:
                     cell.value = val.split(" - ")[0].strip()
 
-        # Guardar la versión FULL
         buf_quot_full = io.BytesIO()
         wb_quot.save(buf_quot_full)
 
@@ -204,15 +209,27 @@ def procesar_archivos(json_data, nombre_proyecto):
             part = str(ws_quot.cell(row=r, column=9).value or "").strip()
             qty_val = ws_quot.cell(row=r, column=8).value
             
-            if desc and not part and qty_val and str(qty_val).isdigit() and int(qty_val) > 0:
-                parent_qty = int(qty_val)
+            q = 0
+            if qty_val is not None:
+                try: q = int(float(qty_val))
+                except: pass
+            
+            # 2.A: ES UN PADRE (Tiene hijos debajo)
+            if desc and not part and q > 0:
+                parent_qty = q
                 for child_r in range(r + 1, req_row):
                     c_desc = str(ws_quot.cell(row=child_r, column=2).value or "").strip()
                     c_part = str(ws_quot.cell(row=child_r, column=9).value or "").strip()
-                    c_qty = str(ws_quot.cell(row=child_r, column=8).value or "").strip()
+                    c_qty_val = ws_quot.cell(row=child_r, column=8).value
                     
                     if not c_desc: break 
-                    if not c_part and c_qty.isdigit(): break 
+                    if not c_part:
+                        c_q = 0
+                        try:
+                            if c_qty_val is not None: c_q = int(float(c_qty_val))
+                        except: pass
+                        if c_q > 0: break 
+                        
                     if not c_part and not str(ws_quot.cell(row=child_r, column=6).value).startswith("="):
                         if not str(ws_quot.cell(row=child_r, column=3).value).startswith("="):
                             continue 
@@ -239,6 +256,30 @@ def procesar_archivos(json_data, nombre_proyecto):
                             "Labour_Base": cat_data["Labour"]
                         }
                     aggregated_io[agg_key]["Quantity"] += parent_qty
+                    
+            # 2.B: ES UN HIJO INDEPENDIENTE (Ej. Fire Alarm Interface)
+            elif desc and part and q > 0:
+                cat_data = get_catalog_match(desc, part)
+                part_no = part
+                agg_key = part_no.strip().lower()
+                
+                if agg_key not in aggregated_io:
+                    clean_desc = desc
+                    if "volt free" in part_no.lower() or "ribxktf" in part_no.lower():
+                        clean_desc = "Software/Relay Interfaces (Enable/Status/Fault)"
+                    elif "by others" in part_no.lower():
+                        clean_desc = "3rd Party Device Interface"
+                    elif "tti" in part_no.lower() or "temp" in part_no.lower() or "dbet" in part_no.lower() or "dbtv" in part_no.lower():
+                        clean_desc = "Temperature Sensor / Thermostat"
+                    elif "valve" in part_no.lower() or "actuator" in part_no.lower():
+                        clean_desc = "Control Valve / Actuator"
+                        
+                    aggregated_io[agg_key] = {
+                        "Description": clean_desc, "Part No.": part_no, "Quantity": 0,
+                        "AI": cat_data["AI"], "AO": cat_data["AO"], "DI": cat_data["DI"], "DO": cat_data["DO"],
+                        "Labour_Base": cat_data["Labour"]
+                    }
+                aggregated_io[agg_key]["Quantity"] += q
         
         for r in range(7, ws_bom.max_row):
             for c in range(2, 13):
@@ -279,31 +320,43 @@ def procesar_archivos(json_data, nombre_proyecto):
         wb_bom.save(buf_bom)
 
         # --- 3. LIMPIEZA FINAL DEL QUOTATION (Ocultar bloques en cero para versión "Clean") ---
-        # Cargamos una copia fresca desde el buffer para evitar el I/O error y proteger las fórmulas
         wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
         ws_clean = wb_clean.active
 
-        # Estado inicial: Mantener visible por si hay texto antes del primer bloque
+        main_system_rows = set()
+        for sys in allowed_systems:
+            r_match = match_native_row(sys, ws_clean)
+            if r_match:
+                main_system_rows.add(r_match)
+
         current_block_keep = True
         
         for r in range(7, req_row):
             c_b = ws_clean.cell(row=r, column=2)
             desc = str(c_b.value or "").strip()
-            
-            # EL DETECTOR DE SISTEMAS: Busca la letra en Negritas
             is_bold = c_b.font and c_b.font.bold
             
-            if desc and is_bold:
+            prev_desc = str(ws_clean.cell(row=r-1, column=2).value or "").strip() if r > 7 else ""
+            
+            is_main_system = False
+            if r in main_system_rows:
+                is_main_system = True
+            elif desc and is_bold and not prev_desc:
+                is_main_system = True
+                
+            if is_main_system:
                 qty_val = ws_clean.cell(row=r, column=8).value
-                current_block_keep = False # Asumimos que no lo ocupamos hasta verificar cantidad
+                current_block_keep = False 
                 try:
-                    # Si el padre tiene cantidad, salvamos a la familia entera
                     if qty_val is not None and int(float(qty_val)) > 0:
                         current_block_keep = True
                 except:
                     pass
             
-            # Ocultamos la fila entera si su sistema padre fue marcado como invisible
+            # REGLA DE VIDA O MUERTE: Nunca ocultar el Fire Alarm Interface
+            if "Fire Alarm Interface" in desc:
+                current_block_keep = True
+            
             if not current_block_keep:
                 ws_clean.row_dimensions[r].hidden = True
 
@@ -406,7 +459,6 @@ if st.session_state.generado:
             use_container_width=True
         )
     
-    # Tan pronto se descargue el primero, aparece el segundo (Sin contraseñas)
     if st.session_state.get("excel_revisado", False):
         st.markdown("---")
         st.markdown("### Step 2: Client-Ready Document")

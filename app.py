@@ -106,8 +106,9 @@ def get_catalog_match(desc, part):
     if "control valve" in d or "actuator" in d: return {"Part": part if part else "Valve", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
     if "enable" in d: return {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50}
     
-    # REGLA PARA EL I/O SCHEDULE DEL FIRE ALARM INTERFACE
+    # REGLAS PARA I/O SCHEDULE (FIRE ALARM Y METERING)
     if "fire alarm interface" in d: return {"Part": part if part else "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
+    if "pulsed input" in d or "meter" in d: return {"Part": part if part else "Device By Others", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
     
     if "fault" in d or "status" in d or "switch" in d: return {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
     if "variable speed" in d or "vsd" in d: return {"Part": "VSD", "AI": 0, "AO": 1, "DI": 1, "DO": 1, "Labour": 50}
@@ -180,7 +181,7 @@ def procesar_archivos(json_data, nombre_proyecto):
             if not isinstance(cell, MergedCell): 
                 cell.value = None
 
-        # INYECCIÓN INTELIGENTE POR CÓDIGO
+        # INYECCIÓN INTELIGENTE POR CÓDIGO (Chiller, Boiler y Metering obligatorios)
         has_chiller = False
         has_boiler = False
         for k, v in json_data.items():
@@ -195,6 +196,9 @@ def procesar_archivos(json_data, nombre_proyecto):
         if has_boiler:
             if "Common LPHW Devices" not in json_data or json_data["Common LPHW Devices"] == 0:
                 json_data["Common LPHW Devices"] = 1
+                
+        # Forzar Metering siempre activo por defecto
+        json_data["Metering"] = 1
 
         for sys_name, qty in json_data.items():
             if qty <= 0: continue
@@ -202,7 +206,7 @@ def procesar_archivos(json_data, nombre_proyecto):
             if match_r:
                 ws_quot.cell(row=match_r, column=8).value = qty
 
-        # INYECCIÓN EXTREMA OBLIGATORIA DE SEGURIDAD
+        # INYECCIÓN EXTREMA OBLIGATORIA DE SEGURIDAD (Fire Alarm y Metering Hijos)
         for r in range(7, req_row):
             desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
             if "Fire Alarm Interface" in desc:
@@ -210,7 +214,8 @@ def procesar_archivos(json_data, nombre_proyecto):
                 ws_quot.cell(row=r, column=5).value = 1 
                 ws_quot.cell(row=r, column=10).value = f"=SUM(E{r})*150"
                 ws_quot.cell(row=r, column=12).value = f"=SUM(C{r}:F{r})*50"
-                break
+            elif "Pulsed Input" in desc: # Gas, Water, Electric Meters
+                ws_quot.cell(row=r, column=5).value = f"=H{r}"
 
         for r in range(7, req_row):
             cell = ws_quot.cell(row=r, column=2)
@@ -371,7 +376,6 @@ def procesar_archivos(json_data, nombre_proyecto):
             elif desc and is_bold and not prev_desc:
                 is_main_system = True
                 
-            # EXCEPCIÓN: Las bombas del Chiller están en negritas pero NO son sistemas principales independientes
             if "primary chw pump" in desc.lower():
                 is_main_system = False
                 
@@ -384,7 +388,8 @@ def procesar_archivos(json_data, nombre_proyecto):
                 except:
                     pass
             
-            if "Fire Alarm Interface" in desc:
+            # EXCEPCIONES DE VIDA O MUERTE: Nunca ocultar Fire Alarm ni Metering
+            if "Fire Alarm Interface" in desc or "Metering" in desc or "Pulsed Input" in desc:
                 current_block_keep = True
             
             if not current_block_keep:

@@ -122,7 +122,6 @@ def match_native_row(sys_name, ws):
         if not desc or part: continue
         if s == desc: return r
         
-        # Coincidencias estrictas para los sistemas padre
         if "primary chw pump a" in s and "primary chw pump a" in desc: return r
         if "primary chw pump b" in s and "primary chw pump b" in desc: return r
         if "boiler" in s and "boiler" == desc: return r
@@ -181,7 +180,7 @@ def procesar_archivos(json_data, nombre_proyecto):
             if not isinstance(cell, MergedCell): 
                 cell.value = None
 
-        # INYECCIÓN INTELIGENTE POR CÓDIGO (Para que la IA no lo omita)
+        # INYECCIÓN INTELIGENTE POR CÓDIGO
         has_chiller = False
         has_boiler = False
         for k, v in json_data.items():
@@ -207,8 +206,8 @@ def procesar_archivos(json_data, nombre_proyecto):
         for r in range(7, req_row):
             desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
             if "Fire Alarm Interface" in desc:
-                ws_quot.cell(row=r, column=8).value = 1 # Forzar 1 entero en Cantidad
-                ws_quot.cell(row=r, column=5).value = 1 # Forzar 1 entero en DI (destruye el 0 roto de la plantilla)
+                ws_quot.cell(row=r, column=8).value = 1 
+                ws_quot.cell(row=r, column=5).value = 1 
                 ws_quot.cell(row=r, column=10).value = f"=SUM(E{r})*150"
                 ws_quot.cell(row=r, column=12).value = f"=SUM(C{r}:F{r})*50"
                 break
@@ -244,7 +243,6 @@ def procesar_archivos(json_data, nombre_proyecto):
                 try: q = int(float(qty_val))
                 except: pass
             
-            # Es un Padre
             if desc and not part and q > 0:
                 parent_qty = q
                 for child_r in range(r + 1, req_row):
@@ -287,7 +285,6 @@ def procesar_archivos(json_data, nombre_proyecto):
                         }
                     aggregated_io[agg_key]["Quantity"] += parent_qty
                     
-            # Es un Hijo Independiente
             elif desc and part and q > 0:
                 cat_data = get_catalog_match(desc, part)
                 part_no = part
@@ -373,6 +370,10 @@ def procesar_archivos(json_data, nombre_proyecto):
                 is_main_system = True
             elif desc and is_bold and not prev_desc:
                 is_main_system = True
+                
+            # EXCEPCIÓN: Las bombas del Chiller están en negritas pero NO son sistemas principales independientes
+            if "primary chw pump" in desc.lower():
+                is_main_system = False
                 
             if is_main_system:
                 qty_val = ws_clean.cell(row=r, column=8).value

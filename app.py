@@ -277,8 +277,8 @@ def procesar_archivos(json_data, nombre_proyecto):
         buf_bom = io.BytesIO()
         wb_bom.save(buf_bom)
 
-        # --- 3. LIMPIEZA FINAL DEL QUOTATION (Eliminar bloques en cero para versión "Clean") ---
-        # Cargamos una copia fresca desde el buffer para evitar el I/O error
+        # --- 3. LIMPIEZA FINAL DEL QUOTATION (Ocultar bloques en cero para versión "Clean") ---
+        # Cargamos una copia fresca desde el buffer para evitar el I/O error y proteger las fórmulas
         wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
         ws_clean = wb_clean.active
 
@@ -311,10 +311,10 @@ def procesar_archivos(json_data, nombre_proyecto):
                     
             rows_to_keep.update(range(req_row, ws_clean.max_row + 1))
             
-            # Se borran las filas de abajo hacia arriba
-            for r in range(ws_clean.max_row, 0, -1):
+            # Ocultamos las filas en lugar de borrarlas para mantener la integridad de las fórmulas
+            for r in range(1, ws_clean.max_row + 1):
                 if r not in rows_to_keep:
-                    ws_clean.delete_rows(r, 1)
+                    ws_clean.row_dimensions[r].hidden = True
 
         buf_quot_clean = io.BytesIO()
         wb_clean.save(buf_quot_clean)
@@ -415,11 +415,10 @@ if st.session_state.generado:
             use_container_width=True
         )
     
-    # Tan pronto se descargue el primero, aparece el segundo (Sin contraseñas)
     if st.session_state.get("excel_revisado", False):
         st.markdown("---")
         st.markdown("### Step 2: Client-Ready Document")
-        st.success("The clean quotation is ready. All empty systems have been automatically removed.")
+        st.success("The clean quotation is ready. All empty systems have been automatically hidden to preserve formulas.")
         
         st.download_button(
             label="DOWNLOAD CLEAN QUOTATION",

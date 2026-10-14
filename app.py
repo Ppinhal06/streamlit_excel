@@ -278,43 +278,52 @@ def procesar_archivos(json_data, nombre_proyecto):
         wb_bom.save(buf_bom)
 
         # --- 3. LIMPIEZA FINAL DEL QUOTATION (Ocultar bloques en cero para versión "Clean") ---
-        # Cargamos una copia fresca desde el buffer para evitar el I/O error y proteger las fórmulas
         wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
         ws_clean = wb_clean.active
 
-        system_to_row = {}
-        row_to_system = {}
-        for sys in allowed_systems:
-            r_match = match_native_row(sys, ws_clean)
-            if r_match:
-                system_to_row[sys] = r_match
-                row_to_system[r_match] = sys
-                
-        all_parent_rows = sorted(list(row_to_system.keys()))
-        
-        if all_parent_rows:
-            rows_to_keep = set(range(1, all_parent_rows[0])) 
-            for i, p_row in enumerate(all_parent_rows):
-                sys = row_to_system[p_row]
-                
-                qty = 0
-                for k, v in json_data.items():
-                    if k.lower() == sys.lower():
-                        try: qty = int(v)
-                        except: qty = 0
-                        break
-                
-                next_r = all_parent_rows[i+1] if i+1 < len(all_parent_rows) else req_row
-                
-                if qty > 0:
-                    rows_to_keep.update(range(p_row, next_r))
-                    
-            rows_to_keep.update(range(req_row, ws_clean.max_row + 1))
+        # Barrido inteligente de bloques de arriba hacia abajo
+        r = 7
+        while r < req_row:
+            desc = str(ws_clean.cell(row=r, column=2).value or "").strip()
+            part = str(ws_clean.cell(row=r, column=9).value or "").strip()
             
-            # Ocultamos las filas en lugar de borrarlas para mantener la integridad de las fórmulas
-            for r in range(1, ws_clean.max_row + 1):
-                if r not in rows_to_keep:
+            # ¿Es el encabezado de un sistema? (Tiene descripción pero NO número de parte)
+            if desc and not part:
+                qty_val = ws_clean.cell(row=r, column=8).value
+                keep_block = False
+                try:
+                    if qty_val is not None and int(float(qty_val)) > 0:
+                        keep_block = True
+                except:
+                    pass
+                
+                # Ocultar el encabezado si la cantidad es 0 o vacía
+                if not keep_block:
                     ws_clean.row_dimensions[r].hidden = True
+                    
+                # Avanzamos a los "hijos" y espacios en blanco debajo de este sistema
+                next_r = r + 1
+                while next_r < req_row:
+                    n_desc = str(ws_clean.cell(row=next_r, column=2).value or "").strip()
+                    n_part = str(ws_clean.cell(row=next_r, column=9).value or "").strip()
+                    
+                    # Si encontramos el siguiente encabezado de sistema, rompemos el ciclo
+                    if n_desc and not n_part:
+                        break
+                        
+                    # Si el bloque entero no se ocupa, ocultamos también a este hijo
+                    if not keep_block:
+                        ws_clean.row_dimensions[next_r].hidden = True
+                        
+                    next_r += 1
+                
+                # Brincamos al siguiente bloque encontrado
+                r = next_r
+            else:
+                # Si por alguna razón hay filas sueltas/vacías antes del primer sistema, las ocultamos
+                if not desc and not part:
+                    ws_clean.row_dimensions[r].hidden = True
+                r += 1
 
         buf_quot_clean = io.BytesIO()
         wb_clean.save(buf_quot_clean)

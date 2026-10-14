@@ -152,7 +152,6 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 def procesar_archivos(json_data, nombre_proyecto):
     try:
         # --- 1. PROCESAR QUOTATION (EXCEL COMPLETO) ---
-        # SEGURO ANTI-ERRORES: Intentar cargar la versión más nueva si existe
         if os.path.exists("template_2_2.xlsx"):
             wb_quot = load_workbook("template_2_2.xlsx")
             template_path = "template_2_2.xlsx"
@@ -183,18 +182,14 @@ def procesar_archivos(json_data, nombre_proyecto):
             match_r = match_native_row(sys_name, ws_quot)
             if match_r:
                 ws_quot.cell(row=match_r, column=8).value = qty
-                if "chiller" in sys_name.lower():
-                    next_desc = str(ws_quot.cell(row=match_r + 1, column=2).value or "").strip().lower()
-                    if "chiller mains" in next_desc:
-                        ws_quot.cell(row=match_r + 1, column=8).value = qty
+                # Aquí se removió el código que inyectaba basura en el "chiller mains"
 
-        # INYECCIÓN EXTREMA OBLIGATORIA DE SEGURIDAD (A prueba de fallos de Excel)
+        # INYECCIÓN EXTREMA OBLIGATORIA DE SEGURIDAD (Fire Alarm Interface)
         for r in range(7, req_row):
             desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
             if "Fire Alarm Interface" in desc:
                 ws_quot.cell(row=r, column=8).value = 1 # Forzar 1 entero en Cantidad
                 ws_quot.cell(row=r, column=5).value = 1 # Forzar 1 entero en DI (destruye el 0 roto de la plantilla)
-                # Re-escribir las fórmulas de precio apuntando a la fila correcta
                 ws_quot.cell(row=r, column=10).value = f"=SUM(E{r})*150"
                 ws_quot.cell(row=r, column=12).value = f"=SUM(C{r}:F{r})*50"
                 break
@@ -273,7 +268,7 @@ def procesar_archivos(json_data, nombre_proyecto):
                         }
                     aggregated_io[agg_key]["Quantity"] += parent_qty
                     
-            # Es un Hijo Independiente (Como el Fire Alarm Interface)
+            # Es un Hijo Independiente
             elif desc and part and q > 0:
                 cat_data = get_catalog_match(desc, part)
                 part_no = part

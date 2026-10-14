@@ -104,6 +104,10 @@ def get_catalog_match(desc, part):
     if "space temperature" in d or "room temp" in d: return component_catalog["Space Temperature Sensor"]
     if "control valve" in d or "actuator" in d: return {"Part": part if part else "Valve", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
     if "enable" in d: return {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 0, "DO": 1, "Labour": 50}
+    
+    # REGLA PARA EL I/O SCHEDULE DEL FIRE ALARM INTERFACE
+    if "fire alarm interface" in d: return {"Part": part if part else "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
+    
     if "fault" in d or "status" in d or "switch" in d: return {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50}
     if "variable speed" in d or "vsd" in d: return {"Part": "VSD", "AI": 0, "AO": 1, "DI": 1, "DO": 1, "Labour": 50}
     if "control signal" in d: return {"Part": "0...10V dc", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50}
@@ -147,7 +151,7 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 def procesar_archivos(json_data, nombre_proyecto):
     try:
         # --- 1. PROCESAR QUOTATION (EXCEL COMPLETO) ---
-        wb_quot = load_workbook("template_2.xlsx") # Reemplaza por "template_2_2.xlsx" si usas el nuevo
+        wb_quot = load_workbook("template_2.xlsx") # Reemplaza por tu nombre local si es _2_2
         ws_quot = wb_quot.active
         
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
@@ -176,11 +180,12 @@ def procesar_archivos(json_data, nombre_proyecto):
                     if "chiller mains" in next_desc:
                         ws_quot.cell(row=match_r + 1, column=8).value = qty
 
-        # INYECCIÓN OBLIGATORIA DE SEGURIDAD (Fire Alarm Interface = 1)
+        # INYECCIÓN OBLIGATORIA DE SEGURIDAD Y REPARACIÓN DEL TEMPLATE
         for r in range(7, req_row):
             desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
             if "Fire Alarm Interface" in desc:
-                ws_quot.cell(row=r, column=8).value = 1
+                ws_quot.cell(row=r, column=8).value = 1 # Forzar 1 en Cantidad
+                ws_quot.cell(row=r, column=5).value = f"=H{r}" # Reparar el '0' hardcodeado en la columna DI
                 break
 
         for r in range(7, req_row):
@@ -214,7 +219,7 @@ def procesar_archivos(json_data, nombre_proyecto):
                 try: q = int(float(qty_val))
                 except: pass
             
-            # 2.A: ES UN PADRE (Tiene hijos debajo)
+            # Es un Padre
             if desc and not part and q > 0:
                 parent_qty = q
                 for child_r in range(r + 1, req_row):
@@ -257,7 +262,7 @@ def procesar_archivos(json_data, nombre_proyecto):
                         }
                     aggregated_io[agg_key]["Quantity"] += parent_qty
                     
-            # 2.B: ES UN HIJO INDEPENDIENTE (Ej. Fire Alarm Interface)
+            # Es un Hijo Independiente (Como el Fire Alarm Interface)
             elif desc and part and q > 0:
                 cat_data = get_catalog_match(desc, part)
                 part_no = part
@@ -319,7 +324,7 @@ def procesar_archivos(json_data, nombre_proyecto):
         buf_bom = io.BytesIO()
         wb_bom.save(buf_bom)
 
-        # --- 3. LIMPIEZA FINAL DEL QUOTATION (Ocultar bloques en cero para versión "Clean") ---
+        # --- 3. LIMPIEZA FINAL DEL QUOTATION ---
         wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
         ws_clean = wb_clean.active
 
@@ -353,7 +358,6 @@ def procesar_archivos(json_data, nombre_proyecto):
                 except:
                     pass
             
-            # REGLA DE VIDA O MUERTE: Nunca ocultar el Fire Alarm Interface
             if "Fire Alarm Interface" in desc:
                 current_block_keep = True
             

@@ -121,6 +121,10 @@ def match_native_row(sys_name, ws):
         part = str(ws.cell(row=r, column=9).value or "").strip()
         if not desc or part: continue
         if s == desc: return r
+        
+        # Coincidencias estrictas para los sistemas padre
+        if "primary chw pump a" in s and "primary chw pump a" in desc: return r
+        if "primary chw pump b" in s and "primary chw pump b" in desc: return r
         if "boiler" in s and "boiler" == desc: return r
         if "pressurisation" in s and "pressurisation" in desc: return r
         if "calorifier" in s and "calorifier" == desc: return r
@@ -177,14 +181,29 @@ def procesar_archivos(json_data, nombre_proyecto):
             if not isinstance(cell, MergedCell): 
                 cell.value = None
 
+        # INYECCIÓN INTELIGENTE POR CÓDIGO (Para que la IA no lo omita)
+        has_chiller = False
+        has_boiler = False
+        for k, v in json_data.items():
+            if v > 0:
+                if "chiller" in k.lower(): has_chiller = True
+                if "boiler" in k.lower(): has_boiler = True
+                
+        if has_chiller:
+            json_data["Primary CHW Pump A"] = 1
+            json_data["Primary CHW Pump B"] = 1
+            
+        if has_boiler:
+            if "Common LPHW Devices" not in json_data or json_data["Common LPHW Devices"] == 0:
+                json_data["Common LPHW Devices"] = 1
+
         for sys_name, qty in json_data.items():
             if qty <= 0: continue
             match_r = match_native_row(sys_name, ws_quot)
             if match_r:
                 ws_quot.cell(row=match_r, column=8).value = qty
-                # Aquí se removió el código que inyectaba basura en el "chiller mains"
 
-        # INYECCIÓN EXTREMA OBLIGATORIA DE SEGURIDAD (Fire Alarm Interface)
+        # INYECCIÓN EXTREMA OBLIGATORIA DE SEGURIDAD
         for r in range(7, req_row):
             desc = str(ws_quot.cell(row=r, column=2).value or "").strip()
             if "Fire Alarm Interface" in desc:

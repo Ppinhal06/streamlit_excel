@@ -9,45 +9,47 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 import os
 
-# --- 1. PAGE CONFIGURATION & ULTRA-CLEAN MINIMALIST STYLE ---
+# --- 1. PAGE CONFIGURATION & MATCHING DC CONTROLS STYLE ---
 st.set_page_config(
     page_title="BEMS Estimator | DC Controls", 
     layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# Minimalist custom CSS injection
+# Custom minimal CSS matching corporate engineering palette (Navy & Slate)
 st.markdown("""
     <style>
     .main {
-        background-color: #FFFFFF;
+        background-color: #FAFAFB;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     h1 {
-        font-weight: 400;
+        font-weight: 500;
         letter-spacing: -0.5px;
-        color: #111827;
-        font-size: 28px !important;
+        color: #002B49;
+        font-size: 26px !important;
+        margin-bottom: 0px !important;
     }
     p, label, .stMarkdown {
-        color: #4B5563;
+        color: #4A5568;
         font-size: 14px;
     }
     /* Sleek minimalist inputs */
     .stTextInput input, .stTextArea textarea {
-        background-color: #FAFAFA !important;
-        border: 1px solid #E5E7EB !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
         border-radius: 6px !important;
-        color: #111827 !important;
+        color: #0F172A !important;
         padding: 10px 14px !important;
         box-shadow: none !important;
     }
     .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #111827 !important;
+        border-color: #002B49 !important;
+        box-shadow: 0 0 0 1px #002B49 !important;
     }
-    /* Minimalist buttons */
+    /* Minimalist primary buttons matching DC Controls Navy */
     .stButton>button {
-        background-color: #111827 !important;
+        background-color: #002B49 !important;
         color: #FFFFFF !important;
         border: none !important;
         border-radius: 6px !important;
@@ -56,28 +58,28 @@ st.markdown("""
         transition: background-color 0.2s ease;
     }
     .stButton>button:hover {
-        background-color: #374151 !important;
+        background-color: #001F33 !important;
     }
     /* Tabs styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 24px;
-        border-bottom: 1px solid #E5E7EB;
+        border-bottom: 1px solid #E2E8F0;
     }
     .stTabs [data-baseweb="tab"] {
         height: 40px;
         background-color: transparent !important;
         border: none !important;
-        color: #6B7280;
+        color: #64748B;
         font-weight: 500;
     }
     .stTabs [aria-selected="true"] {
-        color: #111827 !important;
-        border-bottom: 2px solid #111827 !important;
+        color: #002B49 !important;
+        border-bottom: 2px solid #002B49 !important;
     }
     /* Clean sidebar */
     [data-testid="stSidebar"] {
-        background-color: #FAFAFA;
-        border-right: 1px solid #E5E7EB;
+        background-color: #FFFFFF;
+        border-right: 1px solid #E2E8F0;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -90,28 +92,26 @@ if "excel_reviewed" not in st.session_state:
 def mark_downloaded():
     st.session_state.excel_reviewed = True
 
-# --- 2. MINIMALIST SIDEBAR ---
-with st.sidebar:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=120)
-    elif os.path.exists("logo.jpg"):
-        st.image("logo.jpg", width=120)
-    else:
-        st.markdown("<h3 style='color: #111827; font-weight: 500;'>DC CONTROLS</h3>", unsafe_allow_html=True)
-        
-    st.markdown("<p style='color: #9CA3AF; font-size: 12px;'>BEMS Engine v2.4</p>", unsafe_allow_html=True)
-    st.markdown("<hr style='border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;'>", unsafe_allow_html=True)
-    
-    api_key = st.text_input("Gemini API Key", type="password")
+# --- 2. SECURE API KEY CONFIGURATION ---
+api_key = os.environ.get("GEMINI_API_KEY")
+if not api_key:
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY")
+    except Exception:
+        api_key = None
 
-# --- 3. MAIN HEADER ---
-st.markdown("<h1>BEMS Estimation System</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color: #6B7280; margin-bottom: 30px;'>Automated I/O schedules, BOMs, and quotations.</p>", unsafe_allow_html=True)
+if not api_key:
+    with st.sidebar:
+        st.subheader("Configuration")
+        api_key = st.text_input("Gemini API Key:", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash') 
+
+# --- 3. MAIN HEADER ---
+st.markdown("<h1>DC Controls | BEMS Estimation Engine</h1>", unsafe_allow_html=True)
+st.markdown("<p style='color: #64748B; margin-top: 4px; margin-bottom: 28px;'>Automated I/O schedules, BOMs, and quotations.</p>", unsafe_allow_html=True)
 
 # === SYSTEMS LIST ===
 allowed_systems = [
@@ -451,14 +451,16 @@ project_name = st.text_input("Project Reference", placeholder="e.g. DC-2026-Cava
 project_description = st.text_area(
     "Engineering Scope", 
     placeholder="e.g. Plant with 2 Boilers, 2 Chillers, 25 radiator circuits, and 4 FCUs.",
-    height=100
+    height=110
 )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 if st.button("Generate Quotation", type="primary"):
-    if not api_key or not project_description:
-        st.warning("Please provide your API Key in the sidebar and enter the project scope.")
+    if not project_description:
+        st.warning("Please enter the project scope.")
+    elif not api_key:
+        st.error("No API Key detected. Please configure GEMINI_API_KEY in environment/secrets or sidebar.")
     else:
         with st.status("Processing engineering scope...", expanded=False) as status:
             prompt = f'''
@@ -503,7 +505,7 @@ if st.button("Generate Quotation", type="primary"):
 
 # --- 5. MINIMALIST RESULTS & DOWNLOADS ---
 if st.session_state.generated:
-    st.markdown("<br><hr style='border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;'><br>", unsafe_allow_html=True)
+    st.markdown("<br><hr style='border: none; border-top: 1px solid #E2E8F0; margin: 20px 0;'><br>", unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["Internal Review", "Client Document (Clean)"])
     

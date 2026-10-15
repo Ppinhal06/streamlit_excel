@@ -9,158 +9,45 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 import os
 
-# --- 1. PAGE CONFIGURATION & MODERN SAAS MINIMALIST UI ---
+# --- 1. PAGE CONFIGURATION & STYLING ---
 st.set_page_config(
-    page_title="DC Controls | BEMS Estimator", 
+    page_title="BEMS Estimator Pro | DC Controls", 
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 st.markdown("""
     <style>
-    /* Global background and typography */
-    .stApp {
-        background-color: #0F172A;
-        background: radial-gradient(circle at 50% 0%, #1E293B 0%, #0F172A 100%);
-        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    .main {
+        background-color: #F8F9FA;
     }
-    
-    /* Center container card */
-    .block-container {
-        max-width: 860px !important;
-        padding-top: 3.5rem !important;
-        padding-bottom: 4rem !important;
-    }
-    
-    .saas-card {
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 32px 36px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-        margin-bottom: 24px;
-    }
-    
-    .brand-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-bottom: 1px solid #F1F5F9;
-        padding-bottom: 18px;
-        margin-bottom: 24px;
-    }
-    
-    .brand-title {
-        font-size: 20px;
-        font-weight: 600;
-        color: #0F172A;
-        letter-spacing: -0.3px;
-        margin: 0;
-    }
-    
-    .brand-sub {
-        font-size: 13px;
-        color: #64748B;
-        margin: 4px 0 0 0;
-    }
-
-    .badge {
-        background-color: #F1F5F9;
+    h1, h2, h3 {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         color: #002B49;
-        font-size: 11px;
-        font-weight: 600;
-        padding: 4px 10px;
-        border-radius: 9999px;
+    }
+    .stContainer {
+        background-color: #FFFFFF;
+        padding: 24px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         border: 1px solid #E2E8F0;
+    }
+    .stButton>button {
+        border-radius: 6px;
+        font-weight: 600;
         letter-spacing: 0.5px;
     }
-
-    /* Form labels & inputs */
-    label p {
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        color: #334155 !important;
-        margin-bottom: 4px !important;
+    [data-testid="stSidebar"] {
+        background-color: #001F33;
+        color: #FFFFFF;
     }
-
-    .stTextInput input, .stTextArea textarea {
-        background-color: #F8FAFC !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 8px !important;
-        color: #0F172A !important;
-        font-size: 14px !important;
-        padding: 10px 14px !important;
-        box-shadow: none !important;
+    [data-testid="stSidebar"] label {
+        color: #E2E8F0 !important;
     }
-
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #002B49 !important;
-        background-color: #FFFFFF !important;
-        box-shadow: 0 0 0 1px #002B49 !important;
-    }
-
-    /* Primary Action Button */
-    .stButton>button {
-        background-color: #002B49 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        border-radius: 8px !important;
-        font-size: 14px !important;
-        font-weight: 500 !important;
-        height: 44px !important;
-        width: 100% !important;
-        transition: all 0.15s ease-in-out !important;
-    }
-
-    .stButton>button:hover {
-        background-color: #0A3D62 !important;
-        box-shadow: 0 4px 12px rgba(0, 43, 73, 0.25) !important;
-    }
-
-    /* Download Buttons */
-    .stDownloadButton>button {
-        background-color: #FFFFFF !important;
-        color: #0F172A !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 8px !important;
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        height: 42px !important;
-        width: 100% !important;
-        transition: all 0.15s ease-in-out !important;
-    }
-
-    .stDownloadButton>button:hover {
-        background-color: #F8FAFC !important;
-        border-color: #94A3B8 !important;
-    }
-
-    /* Final clean button highlight */
-    div[data-testid="stDownloadButton"]:has(button:contains("Clean")) button,
-    .clean-btn>button {
-        background-color: #0284C7 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
-    
-    /* Result tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 16px;
-        border-bottom: 1px solid #E2E8F0;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        background-color: transparent !important;
-        border: none !important;
-        color: #64748B;
-        font-size: 13px;
-        font-weight: 500;
-        padding: 0 8px;
-    }
-    .stTabs [aria-selected="true"] {
-        color: #002B49 !important;
-        border-bottom: 2px solid #002B49 !important;
-        font-weight: 600;
+    [data-testid="stSidebar"] .stTextInput input {
+        background-color: #002B49;
+        color: #FFFFFF;
+        border: 1px solid #1E3A5F;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -181,14 +68,36 @@ if not api_key:
     except Exception:
         api_key = None
 
-if not api_key:
-    with st.sidebar:
-        st.subheader("Configuration")
-        api_key = st.text_input("Gemini API Key:", type="password")
+# --- 3. SIDEBAR ---
+with st.sidebar:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    elif os.path.exists("logo.jpg"):
+        st.image("logo.jpg", use_container_width=True)
+    else:
+        st.markdown("<h2 style='text-align: center; color: #FFFFFF;'>DC CONTROLS</h2>", unsafe_allow_html=True)
+        
+    st.markdown("<p style='text-align: center; color: #94A3B8; font-size: 13px;'>BEMS Estimation Engine</p>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-color: #1E3A5F;'>", unsafe_allow_html=True)
+    
+    st.markdown("### System Access")
+    if not api_key:
+        api_key = st.text_input("Enter API Key (Gemini):", type="password", help="Requires authorized Gemini API token.")
+    else:
+        st.markdown("<p style='color: #38BDF8; font-size: 12px;'>API Key configured securely via environment.</p>", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #94A3B8; font-size: 12px;'>Automatic point schedule generation, BOM consolidation, and commercial quotation export.</p>", unsafe_allow_html=True)
+
+# --- 4. MAIN HEADER ---
+st.markdown("<h1 style='text-align: center; color: #003366;'>Automated BEMS Quotation System</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 16px; color: #555;'>AI-Powered I/O Schedule and Cost Estimator</p>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-3.6-flash') 
 
 # === SYSTEMS LIST ===
 allowed_systems = [
@@ -523,37 +432,32 @@ def procesar_archivos(json_data, nombre_proyecto):
         st.error(f"Error processing files: {e}")
         return None, None, None
 
-# --- 4. MAIN USER INTERFACE CARD ---
-st.markdown("""
-<div class="saas-card">
-    <div class="brand-header">
-        <div>
-            <h2 class="brand-title">DC Controls Estimator</h2>
-            <p class="brand-sub">Building Energy Management Systems (BEMS)</p>
-        </div>
-        <div>
-            <span class="badge">v2.4 PROD</span>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
+# --- 5. PROJECT DETAILS INPUT CONTAINER ---
+st.markdown("### Project Details")
+with st.container():
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
+    with col2:
+        project_description = st.text_area(
+            "Engineering Scope:", 
+            placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs.",
+            height=100
+        )
 
-# Form inside card
-project_name = st.text_input("Project Reference", placeholder="e.g. DC-2026-Cavan")
-project_description = st.text_area(
-    "Engineering Scope & Plant Specifications", 
-    placeholder="e.g. Plant room with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs.",
-    height=120
-)
+st.write("") 
 
-st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+with col_btn2:
+    btn_generate = st.button("Analyze Scope & Generate Quotation", type="primary", use_container_width=True)
 
-if st.button("Generate Quotation Package"):
-    if not project_description:
-        st.warning("Please provide the project engineering scope.")
-    elif not api_key:
-        st.error("Missing Gemini API Key. Configure GEMINI_API_KEY in Streamlit Secrets.")
+if btn_generate:
+    if not api_key:
+        st.warning("Please provide an API Key in the sidebar or configure it in Secrets.")
+    elif not project_description:
+        st.warning("Please provide a project engineering description.")
     else:
-        with st.status("Analyzing specifications and generating models...", expanded=False) as status:
+        with st.status("AI Estimator is working...", expanded=True) as status:
             prompt = f'''
             You are a BEMS Estimator. Read the user description and count how many of the ALLOWED SYSTEMS are needed.
             
@@ -590,49 +494,47 @@ if st.button("Generate Quotation Package"):
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
                     
                     st.session_state.excel_reviewed = False
+                    status.update(label="Process Complete", state="complete", expanded=False)
+
             except Exception as e:
-                st.error(f"Execution Error: {e}")
+                status.update(label="Process Failed", state="error", expanded=True)
+                st.error(f"Error AI/JSON: {e}")
 
-st.markdown("</div>", unsafe_allow_html=True)
-
-# --- 5. RESULTS CARD ---
+# --- 6. RESULTS & DOWNLOADS ---
 if st.session_state.generated:
-    st.markdown("""
-    <div class="saas-card">
-        <h3 style="font-size: 16px; font-weight: 600; color: #0F172A; margin: 0 0 16px 0;">Deliverables</h3>
-    """, unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("### Step 1: Review Working Files")
+    st.info("Download the full Quotation to review counting logic and the consolidated I/O Schedule.")
     
-    tab1, tab2 = st.tabs(["Review Package", "Client Deliverable"])
+    col_d1, col_d2 = st.columns(2)
+    with col_d1:
+        st.download_button(
+            "Download Quotation (Full / Review)", 
+            data=st.session_state.buffer_full, 
+            file_name=st.session_state.nombre_full, 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            on_click=mark_downloaded,
+            use_container_width=True
+        )
+    with col_d2:
+        st.download_button(
+            "Download I/O Schedule (Excel)", 
+            data=st.session_state.buffer_bom, 
+            file_name=st.session_state.nombre_io, 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
     
-    with tab1:
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        col1, col2 = st.columns(2, gap="medium")
-        with col1:
-            st.download_button(
-                "Download Master Quotation (Full)",
-                data=st.session_state.buffer_full,
-                file_name=st.session_state.nombre_full,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=mark_downloaded
-            )
-        with col2:
-            st.download_button(
-                "Download I/O Schedule (BOM)",
-                data=st.session_state.buffer_bom,
-                file_name=st.session_state.nombre_io,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            
-    with tab2:
-        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-        if st.session_state.get("excel_reviewed", False):
-            st.download_button(
-                label="Download Clean Quotation (Client Ready)",
-                data=st.session_state.buffer_clean,
-                file_name=st.session_state.nombre_clean,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        else:
-            st.info("Download the Master Quotation in Step 1 first to unlock the client-ready package.")
-            
-    st.markdown("</div>", unsafe_allow_html=True)
+    if st.session_state.get("excel_reviewed", False):
+        st.markdown("---")
+        st.markdown("### Step 2: Client-Ready Document")
+        st.success("The clean quotation is ready. All unused systems have been automatically hidden while preserving formulas.")
+        
+        st.download_button(
+            label="DOWNLOAD CLEAN QUOTATION",
+            data=st.session_state.buffer_clean,
+            file_name=st.session_state.nombre_clean,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True
+        )

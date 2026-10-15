@@ -9,60 +9,143 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 import os
 
-# --- 1. PAGE CONFIGURATION & MATCHING DC CONTROLS STYLE ---
+# --- 1. PAGE CONFIGURATION & MODERN SAAS MINIMALIST UI ---
 st.set_page_config(
-    page_title="BEMS Estimator | DC Controls", 
-    layout="centered",
+    page_title="DC Controls | BEMS Estimator", 
+    layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Custom minimal CSS matching corporate engineering palette (Navy & Slate)
 st.markdown("""
     <style>
-    .main {
-        background-color: #FAFAFB;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    /* Global background and typography */
+    .stApp {
+        background-color: #0F172A;
+        background: radial-gradient(circle at 50% 0%, #1E293B 0%, #0F172A 100%);
+        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
     }
-    h1 {
-        font-weight: 500;
-        letter-spacing: -0.5px;
+    
+    /* Center container card */
+    .block-container {
+        max-width: 860px !important;
+        padding-top: 3.5rem !important;
+        padding-bottom: 4rem !important;
+    }
+    
+    .saas-card {
+        background-color: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 12px;
+        padding: 32px 36px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 24px;
+    }
+    
+    .brand-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #F1F5F9;
+        padding-bottom: 18px;
+        margin-bottom: 24px;
+    }
+    
+    .brand-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #0F172A;
+        letter-spacing: -0.3px;
+        margin: 0;
+    }
+    
+    .brand-sub {
+        font-size: 13px;
+        color: #64748B;
+        margin: 4px 0 0 0;
+    }
+
+    .badge {
+        background-color: #F1F5F9;
         color: #002B49;
-        font-size: 26px !important;
-        margin-bottom: 0px !important;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 9999px;
+        border: 1px solid #E2E8F0;
+        letter-spacing: 0.5px;
     }
-    p, label, .stMarkdown {
-        color: #4A5568;
-        font-size: 14px;
+
+    /* Form labels & inputs */
+    label p {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #334155 !important;
+        margin-bottom: 4px !important;
     }
-    /* Sleek minimalist inputs */
+
     .stTextInput input, .stTextArea textarea {
-        background-color: #FFFFFF !important;
-        border: 1px solid #CBD5E1 !important;
-        border-radius: 6px !important;
+        background-color: #F8FAFC !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 8px !important;
         color: #0F172A !important;
+        font-size: 14px !important;
         padding: 10px 14px !important;
         box-shadow: none !important;
     }
+
     .stTextInput input:focus, .stTextArea textarea:focus {
         border-color: #002B49 !important;
+        background-color: #FFFFFF !important;
         box-shadow: 0 0 0 1px #002B49 !important;
     }
-    /* Minimalist primary buttons matching DC Controls Navy */
+
+    /* Primary Action Button */
     .stButton>button {
         background-color: #002B49 !important;
         color: #FFFFFF !important;
         border: none !important;
-        border-radius: 6px !important;
+        border-radius: 8px !important;
+        font-size: 14px !important;
         font-weight: 500 !important;
-        padding: 10px 20px !important;
-        transition: background-color 0.2s ease;
+        height: 44px !important;
+        width: 100% !important;
+        transition: all 0.15s ease-in-out !important;
     }
+
     .stButton>button:hover {
-        background-color: #001F33 !important;
+        background-color: #0A3D62 !important;
+        box-shadow: 0 4px 12px rgba(0, 43, 73, 0.25) !important;
     }
-    /* Tabs styling */
+
+    /* Download Buttons */
+    .stDownloadButton>button {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border: 1px solid #CBD5E1 !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        height: 42px !important;
+        width: 100% !important;
+        transition: all 0.15s ease-in-out !important;
+    }
+
+    .stDownloadButton>button:hover {
+        background-color: #F8FAFC !important;
+        border-color: #94A3B8 !important;
+    }
+
+    /* Final clean button highlight */
+    div[data-testid="stDownloadButton"]:has(button:contains("Clean")) button,
+    .clean-btn>button {
+        background-color: #0284C7 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+    }
+    
+    /* Result tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
+        gap: 16px;
         border-bottom: 1px solid #E2E8F0;
     }
     .stTabs [data-baseweb="tab"] {
@@ -70,16 +153,14 @@ st.markdown("""
         background-color: transparent !important;
         border: none !important;
         color: #64748B;
+        font-size: 13px;
         font-weight: 500;
+        padding: 0 8px;
     }
     .stTabs [aria-selected="true"] {
         color: #002B49 !important;
         border-bottom: 2px solid #002B49 !important;
-    }
-    /* Clean sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E2E8F0;
+        font-weight: 600;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -92,7 +173,7 @@ if "excel_reviewed" not in st.session_state:
 def mark_downloaded():
     st.session_state.excel_reviewed = True
 
-# --- 2. SECURE API KEY CONFIGURATION ---
+# --- 2. API KEY RESOLUTION ---
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     try:
@@ -107,11 +188,7 @@ if not api_key:
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash') 
-
-# --- 3. MAIN HEADER ---
-st.markdown("<h1>DC Controls | BEMS Estimation Engine</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color: #64748B; margin-top: 4px; margin-bottom: 28px;'>Automated I/O schedules, BOMs, and quotations.</p>", unsafe_allow_html=True)
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
 # === SYSTEMS LIST ===
 allowed_systems = [
@@ -197,7 +274,7 @@ def match_native_row(sys_name, ws):
         if "lphw" in s and "common" in s and "lphw" in desc and "common" in desc: return r
         if "primary lphw" in s and "primary lphw" in desc: return r
         if "ahu" in s and ("ahu" == desc or "air handling unit" in desc): return r
-        if "fcu" in s and ("fcu" == desc or "fan coil" in desc): return r
+        if "fcu" in s and ("fcu" in desc or "fan coil" in desc): return r
         if "chiller" in s and "chiller" == desc: return r
         if "extract fan" in s and "extract fan" in desc: return r
         if "metering" in s and "metering" in desc: return r
@@ -446,23 +523,37 @@ def procesar_archivos(json_data, nombre_proyecto):
         st.error(f"Error processing files: {e}")
         return None, None, None
 
-# --- 4. MINIMALIST INPUT INTERFACE ---
+# --- 4. MAIN USER INTERFACE CARD ---
+st.markdown("""
+<div class="saas-card">
+    <div class="brand-header">
+        <div>
+            <h2 class="brand-title">DC Controls Estimator</h2>
+            <p class="brand-sub">Building Energy Management Systems (BEMS)</p>
+        </div>
+        <div>
+            <span class="badge">v2.4 PROD</span>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+# Form inside card
 project_name = st.text_input("Project Reference", placeholder="e.g. DC-2026-Cavan")
 project_description = st.text_area(
-    "Engineering Scope", 
-    placeholder="e.g. Plant with 2 Boilers, 2 Chillers, 25 radiator circuits, and 4 FCUs.",
-    height=110
+    "Engineering Scope & Plant Specifications", 
+    placeholder="e.g. Plant room with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs.",
+    height=120
 )
 
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 
-if st.button("Generate Quotation", type="primary"):
+if st.button("Generate Quotation Package"):
     if not project_description:
-        st.warning("Please enter the project scope.")
+        st.warning("Please provide the project engineering scope.")
     elif not api_key:
-        st.error("No API Key detected. Please configure GEMINI_API_KEY in environment/secrets or sidebar.")
+        st.error("Missing Gemini API Key. Configure GEMINI_API_KEY in Streamlit Secrets.")
     else:
-        with st.status("Processing engineering scope...", expanded=False) as status:
+        with st.status("Analyzing specifications and generating models...", expanded=False) as status:
             prompt = f'''
             You are a BEMS Estimator. Read the user description and count how many of the ALLOWED SYSTEMS are needed.
             
@@ -499,46 +590,49 @@ if st.button("Generate Quotation", type="primary"):
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
                     
                     st.session_state.excel_reviewed = False
-
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Execution Error: {e}")
 
-# --- 5. MINIMALIST RESULTS & DOWNLOADS ---
+st.markdown("</div>", unsafe_allow_html=True)
+
+# --- 5. RESULTS CARD ---
 if st.session_state.generated:
-    st.markdown("<br><hr style='border: none; border-top: 1px solid #E2E8F0; margin: 20px 0;'><br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="saas-card">
+        <h3 style="font-size: 16px; font-weight: 600; color: #0F172A; margin: 0 0 16px 0;">Deliverables</h3>
+    """, unsafe_allow_html=True)
     
-    tab1, tab2 = st.tabs(["Internal Review", "Client Document (Clean)"])
+    tab1, tab2 = st.tabs(["Review Package", "Client Deliverable"])
     
     with tab1:
-        st.markdown("<br>", unsafe_allow_html=True)
-        col_d1, col_d2 = st.columns(2, gap="medium")
-        with col_d1:
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2, gap="medium")
+        with col1:
             st.download_button(
-                "Download Quotation (Full / Review)", 
-                data=st.session_state.buffer_full, 
-                file_name=st.session_state.nombre_full, 
+                "Download Master Quotation (Full)",
+                data=st.session_state.buffer_full,
+                file_name=st.session_state.nombre_full,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=mark_downloaded,
-                use_container_width=True
+                on_click=mark_downloaded
             )
-        with col_d2:
+        with col2:
             st.download_button(
-                "Download I/O Schedule (BOM)", 
-                data=st.session_state.buffer_bom, 
-                file_name=st.session_state.nombre_io, 
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                "Download I/O Schedule (BOM)",
+                data=st.session_state.buffer_bom,
+                file_name=st.session_state.nombre_io,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             
     with tab2:
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         if st.session_state.get("excel_reviewed", False):
             st.download_button(
-                label="Download Final Clean Quotation",
+                label="Download Clean Quotation (Client Ready)",
                 data=st.session_state.buffer_clean,
                 file_name=st.session_state.nombre_clean,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         else:
-            st.info("Please download the working files in the first tab to unlock the final document.")
+            st.info("Download the Master Quotation in Step 1 first to unlock the client-ready package.")
+            
+    st.markdown("</div>", unsafe_allow_html=True)

@@ -9,46 +9,75 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 import os
 
-# --- 1. PAGE CONFIGURATION & CLEAN UI STYLE ---
+# --- 1. PAGE CONFIGURATION & ULTRA-CLEAN MINIMALIST STYLE ---
 st.set_page_config(
-    page_title="BEMS Estimator Pro | DC Controls", 
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="BEMS Estimator | DC Controls", 
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS injection for a modern, clean look
+# Minimalist custom CSS injection
 st.markdown("""
     <style>
     .main {
-        background-color: #F8F9FA;
-    }
-    h1, h2, h3 {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        color: #002B49;
-    }
-    .stContainer {
         background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        border: 1px solid #E5E7EB;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
+    h1 {
+        font-weight: 400;
+        letter-spacing: -0.5px;
+        color: #111827;
+        font-size: 28px !important;
+    }
+    p, label, .stMarkdown {
+        color: #4B5563;
+        font-size: 14px;
+    }
+    /* Sleek minimalist inputs */
+    .stTextInput input, .stTextArea textarea {
+        background-color: #FAFAFA !important;
+        border: 1px solid #E5E7EB !important;
+        border-radius: 6px !important;
+        color: #111827 !important;
+        padding: 10px 14px !important;
+        box-shadow: none !important;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #111827 !important;
+    }
+    /* Minimalist buttons */
     .stButton>button {
-        border-radius: 6px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
+        background-color: #111827 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+        padding: 10px 20px !important;
+        transition: background-color 0.2s ease;
     }
+    .stButton>button:hover {
+        background-color: #374151 !important;
+    }
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+        border-bottom: 1px solid #E5E7EB;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 40px;
+        background-color: transparent !important;
+        border: none !important;
+        color: #6B7280;
+        font-weight: 500;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #111827 !important;
+        border-bottom: 2px solid #111827 !important;
+    }
+    /* Clean sidebar */
     [data-testid="stSidebar"] {
-        background-color: #001F33;
-        color: #FFFFFF;
-    }
-    [data-testid="stSidebar"] label {
-        color: #E2E8F0 !important;
-    }
-    [data-testid="stSidebar"] .stTextInput input {
-        background-color: #002B49;
-        color: #FFFFFF;
-        border: 1px solid #1E3A5F;
+        background-color: #FAFAFA;
+        border-right: 1px solid #E5E7EB;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -61,28 +90,24 @@ if "excel_reviewed" not in st.session_state:
 def mark_downloaded():
     st.session_state.excel_reviewed = True
 
-# --- 2. SIDEBAR ---
+# --- 2. MINIMALIST SIDEBAR ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
-        st.image("logo.png", use_container_width=True)
+        st.image("logo.png", width=120)
     elif os.path.exists("logo.jpg"):
-        st.image("logo.jpg", use_container_width=True)
+        st.image("logo.jpg", width=120)
     else:
-        st.markdown("<h2 style='text-align: center; color: #FFFFFF;'>DC CONTROLS</h2>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #111827; font-weight: 500;'>DC CONTROLS</h3>", unsafe_allow_html=True)
         
-    st.markdown("<p style='text-align: center; color: #94A3B8; font-size: 13px;'>BEMS Estimation Engine v2.4</p>", unsafe_allow_html=True)
-    st.markdown("<hr style='border-color: #1E3A5F;'>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #9CA3AF; font-size: 12px;'>BEMS Engine v2.4</p>", unsafe_allow_html=True)
+    st.markdown("<hr style='border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;'>", unsafe_allow_html=True)
     
-    st.subheader("Configuration")
-    api_key = st.text_input("Gemini API Key:", type="password", help="Enter your authorized Gemini API token.")
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.info("Tip: Describe the plant equipment clearly so the AI can perform an optimal mapping.")
+    api_key = st.text_input("Gemini API Key", type="password")
 
 # --- 3. MAIN HEADER ---
-st.markdown("<h1 style='color: #002B49; margin-bottom: 0;'>Automated BEMS Quotation System</h1>", unsafe_allow_html=True)
-st.markdown("<p style='font-size: 16px; color: #64748B; margin-top: 5px;'>AI-powered generation of I/O Schedules, BOMs, and Commercial Quotations.</p>", unsafe_allow_html=True)
-st.markdown("<hr style='margin-top: 10px; margin-bottom: 25px;'>", unsafe_allow_html=True)
+st.markdown("<h1>BEMS Estimation System</h1>", unsafe_allow_html=True)
+st.markdown("<p style='color: #6B7280; margin-bottom: 30px;'>Automated I/O schedules, BOMs, and quotations.</p>", unsafe_allow_html=True)
 
 if api_key:
     genai.configure(api_key=api_key)
@@ -421,31 +446,21 @@ def procesar_archivos(json_data, nombre_proyecto):
         st.error(f"Error processing files: {e}")
         return None, None, None
 
-# --- 4. INPUT INTERFACE (CLEAN DESIGN) ---
-with st.container():
-    st.subheader("Project Parameters")
-    col1, col2 = st.columns([1, 2], gap="medium")
-    with col1:
-        project_name = st.text_input("Project Reference:", placeholder="e.g. DC-2026-Cavan")
-    with col2:
-        project_description = st.text_area(
-            "Engineering Scope:", 
-            placeholder="e.g. Plant with 2 Boilers, 2 Chillers, 25 radiator circuits, and 4 FCUs.",
-            height=85
-        )
+# --- 4. MINIMALIST INPUT INTERFACE ---
+project_name = st.text_input("Project Reference", placeholder="e.g. DC-2026-Cavan")
+project_description = st.text_area(
+    "Engineering Scope", 
+    placeholder="e.g. Plant with 2 Boilers, 2 Chillers, 25 radiator circuits, and 4 FCUs.",
+    height=100
+)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Center main action button
-_, col_btn, _ = st.columns([1, 2, 1])
-with col_btn:
-    btn_generate = st.button("Analyze Scope & Generate Quotation", type="primary", use_container_width=True)
-
-if btn_generate:
+if st.button("Generate Quotation", type="primary"):
     if not api_key or not project_description:
-        st.warning("Please ensure you enter your API Key in the sidebar and provide the project scope.")
+        st.warning("Please provide your API Key in the sidebar and enter the project scope.")
     else:
-        with st.status("Processing engineering scope and applying business rules...", expanded=True) as status:
+        with st.status("Processing engineering scope...", expanded=False) as status:
             prompt = f'''
             You are a BEMS Estimator. Read the user description and count how many of the ALLOWED SYSTEMS are needed.
             
@@ -482,21 +497,18 @@ if btn_generate:
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
                     
                     st.session_state.excel_reviewed = False
-                    status.update(label="Process completed successfully!", state="complete", expanded=False)
 
             except Exception as e:
-                status.update(label="Processing failed", state="error", expanded=True)
-                st.error(f"AI/JSON Error: {e}")
+                st.error(f"Error: {e}")
 
-# --- 5. RESULTS & DOWNLOADS (TABS LAYOUT) ---
+# --- 5. MINIMALIST RESULTS & DOWNLOADS ---
 if st.session_state.generated:
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### Generated Results")
+    st.markdown("<br><hr style='border: none; border-top: 1px solid #E5E7EB; margin: 20px 0;'><br>", unsafe_allow_html=True)
     
-    tab1, tab2 = st.tabs(["Step 1: Internal Review", "Step 2: Client Document (Clean)"])
+    tab1, tab2 = st.tabs(["Internal Review", "Client Document (Clean)"])
     
     with tab1:
-        st.info("Download working files to verify counting logic, totals, and the consolidated I/O Schedule.")
+        st.markdown("<br>", unsafe_allow_html=True)
         col_d1, col_d2 = st.columns(2, gap="medium")
         with col_d1:
             st.download_button(
@@ -517,18 +529,14 @@ if st.session_state.generated:
             )
             
     with tab2:
+        st.markdown("<br>", unsafe_allow_html=True)
         if st.session_state.get("excel_reviewed", False):
-            st.success("The document is ready and optimized. Empty systems have been automatically hidden while preserving formulas.")
-            st.markdown("<br>", unsafe_allow_html=True)
-            _, col_dl_clean, _ = st.columns([1, 2, 1])
-            with col_dl_clean:
-                st.download_button(
-                    label="DOWNLOAD FINAL CLEAN QUOTATION",
-                    data=st.session_state.buffer_clean,
-                    file_name=st.session_state.nombre_clean,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary",
-                    use_container_width=True
-                )
+            st.download_button(
+                label="Download Final Clean Quotation",
+                data=st.session_state.buffer_clean,
+                file_name=st.session_state.nombre_clean,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
         else:
-            st.warning("To unlock the final document, please first click Download Quotation (Full / Review) in the previous tab to validate data.")
+            st.info("Please download the working files in the first tab to unlock the final document.")

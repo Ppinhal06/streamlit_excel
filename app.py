@@ -9,17 +9,16 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 import os
 
-# --- 1. CONFIGURACION DE PAGINA Y ESTILO CLEAN ---
+# --- 1. PAGE CONFIGURATION & CLEAN UI STYLE ---
 st.set_page_config(
     page_title="BEMS Estimator Pro | DC Controls", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Inyección de CSS personalizado para un look moderno y limpio
+# Custom CSS injection for a modern, clean look
 st.markdown("""
     <style>
-    /* Estilo general y tipografía */
     .main {
         background-color: #F8F9FA;
     }
@@ -27,7 +26,6 @@ st.markdown("""
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         color: #002B49;
     }
-    /* Tarjetas contenedoras */
     .stContainer {
         background-color: #FFFFFF;
         padding: 20px;
@@ -35,13 +33,11 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border: 1px solid #E5E7EB;
     }
-    /* Botones principales */
     .stButton>button {
         border-radius: 6px;
         font-weight: 600;
         letter-spacing: 0.5px;
     }
-    /* Sidebar elegante */
     [data-testid="stSidebar"] {
         background-color: #001F33;
         color: #FFFFFF;
@@ -57,15 +53,15 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-if "generado" not in st.session_state:
-    st.session_state.generado = False
-if "excel_revisado" not in st.session_state:
-    st.session_state.excel_revisado = False
+if "generated" not in st.session_state:
+    st.session_state.generated = False
+if "excel_reviewed" not in st.session_state:
+    st.session_state.excel_reviewed = False
 
-def marcar_descargado():
-    st.session_state.excel_revisado = True
+def mark_downloaded():
+    st.session_state.excel_reviewed = True
 
-# --- 2. BARRA LATERAL ---
+# --- 2. SIDEBAR ---
 with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     if os.path.exists("logo.png"):
@@ -78,21 +74,21 @@ with st.sidebar:
     st.markdown("<p style='text-align: center; color: #94A3B8; font-size: 13px;'>BEMS Estimation Engine v2.4</p>", unsafe_allow_html=True)
     st.markdown("<hr style='border-color: #1E3A5F;'>", unsafe_allow_html=True)
     
-    st.subheader("Configuración")
-    api_key = st.text_input("Gemini API Key:", type="password", help="Introduce tu llave autorizada de Gemini.")
+    st.subheader("Configuration")
+    api_key = st.text_input("Gemini API Key:", type="password", help="Enter your authorized Gemini API token.")
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.info("Describe con claridad los equipos de la planta para que la IA realice un mapeo óptimo.")
+    st.info("Tip: Describe the plant equipment clearly so the AI can perform an optimal mapping.")
 
-# --- 3. ENCABEZADO PRINCIPAL ---
+# --- 3. MAIN HEADER ---
 st.markdown("<h1 style='color: #002B49; margin-bottom: 0;'>Automated BEMS Quotation System</h1>", unsafe_allow_html=True)
-st.markdown("<p style='font-size: 16px; color: #64748B; margin-top: 5px;'>Generación inteligente de I/O Schedules, BOMs y Presupuestos Comerciales.</p>", unsafe_allow_html=True)
+st.markdown("<p style='font-size: 16px; color: #64748B; margin-top: 5px;'>AI-powered generation of I/O Schedules, BOMs, and Commercial Quotations.</p>", unsafe_allow_html=True)
 st.markdown("<hr style='margin-top: 10px; margin-bottom: 25px;'>", unsafe_allow_html=True)
 
 if api_key:
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-3.6-flash') 
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 
-# === LISTA DE SISTEMAS ===
+# === SYSTEMS LIST ===
 allowed_systems = [
     "Common LPHW Devices", "Hot Water Generator  No.1", "Boiler", "LPHW Pressurisation Unit",
     "Dosing Unit", "Primary LPHW Single Pumps", "Calorifier", "Gas Detection Panel",
@@ -249,7 +245,7 @@ def procesar_archivos(json_data, nombre_proyecto):
         buf_quot_full = io.BytesIO()
         wb_quot.save(buf_quot_full)
 
-        # --- 2. PROCESAR BOM ---
+        # --- 2. PROCESS BOM ---
         wb_bom = load_workbook(template_path)
         ws_bom = wb_bom.active
         
@@ -373,7 +369,7 @@ def procesar_archivos(json_data, nombre_proyecto):
         buf_bom = io.BytesIO()
         wb_bom.save(buf_bom)
 
-        # --- 3. LIMPIEZA FINAL DEL QUOTATION ---
+        # --- 3. FINAL QUOTATION CLEANING ---
         wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
         ws_clean = wb_clean.active
 
@@ -422,34 +418,34 @@ def procesar_archivos(json_data, nombre_proyecto):
         return buf_quot_full.getvalue(), buf_bom.getvalue(), buf_quot_clean.getvalue()
         
     except Exception as e:
-        st.error(f"Error procesando el archivo: {e}")
+        st.error(f"Error processing files: {e}")
         return None, None, None
 
-# --- 4. INTERFAZ DE ENTRADA (DISEÑO CLEAN) ---
+# --- 4. INPUT INTERFACE (CLEAN DESIGN) ---
 with st.container():
-    st.subheader("📋 Parámetros del Proyecto")
+    st.subheader("Project Parameters")
     col1, col2 = st.columns([1, 2], gap="medium")
     with col1:
-        project_name = st.text_input("Referencia del Proyecto:", placeholder="Ej. DC-2026-Cavan")
+        project_name = st.text_input("Project Reference:", placeholder="e.g. DC-2026-Cavan")
     with col2:
         project_description = st.text_area(
-            "Alcance de Ingeniería (Scope):", 
-            placeholder="Ej. Planta con 2 Calderas, 2 Enfriadoras, 25 circuitos de radiadores y 4 FCUs.",
+            "Engineering Scope:", 
+            placeholder="e.g. Plant with 2 Boilers, 2 Chillers, 25 radiator circuits, and 4 FCUs.",
             height=85
         )
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Centrar botón de acción principal
+# Center main action button
 _, col_btn, _ = st.columns([1, 2, 1])
 with col_btn:
-    btn_generate = st.button("Analizar Alcance y Generar Presupuesto", type="primary", use_container_width=True)
+    btn_generate = st.button("Analyze Scope & Generate Quotation", type="primary", use_container_width=True)
 
 if btn_generate:
     if not api_key or not project_description:
-        st.warning("Por favor, asegúrate de ingresar tu API Key en la barra lateral y redactar el alcance del proyecto.")
+        st.warning("Please ensure you enter your API Key in the sidebar and provide the project scope.")
     else:
-        with st.status("Procesando ingeniería y aplicando reglas de negocio...", expanded=True) as status:
+        with st.status("Processing engineering scope and applying business rules...", expanded=True) as status:
             prompt = f'''
             You are a BEMS Estimator. Read the user description and count how many of the ALLOWED SYSTEMS are needed.
             
@@ -477,7 +473,7 @@ if btn_generate:
                 buffer_full, buffer_bom, buffer_clean = procesar_archivos(system_quantities, project_name)
                 
                 if buffer_full and buffer_bom and buffer_clean:
-                    st.session_state.generado = True
+                    st.session_state.generated = True
                     st.session_state.buffer_full = buffer_full
                     st.session_state.buffer_bom = buffer_bom
                     st.session_state.buffer_clean = buffer_clean
@@ -485,35 +481,35 @@ if btn_generate:
                     st.session_state.nombre_clean = f"Clean_Quotation_{project_name.replace(' ', '_')}.xlsx"
                     st.session_state.nombre_io = f"IO_Schedule_{project_name.replace(' ', '_')}.xlsx"
                     
-                    st.session_state.excel_revisado = False
-                    status.update(label="¡Proceso completado con éxito!", state="complete", expanded=False)
+                    st.session_state.excel_reviewed = False
+                    status.update(label="Process completed successfully!", state="complete", expanded=False)
 
             except Exception as e:
-                status.update(label="Error en el procesamiento", state="error", expanded=True)
-                st.error(f"Error AI/JSON: {e}")
+                status.update(label="Processing failed", state="error", expanded=True)
+                st.error(f"AI/JSON Error: {e}")
 
-# --- 5. RESULTADOS Y DESCARGAS (DISEÑO EN PESTAÑAS) ---
-if st.session_state.generado:
+# --- 5. RESULTS & DOWNLOADS (TABS LAYOUT) ---
+if st.session_state.generated:
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### Resultados Generados")
+    st.markdown("### Generated Results")
     
-    tab1, tab2 = st.tabs(["Paso 1: Revisión Interna", "Paso 2: Documento para Cliente (Clean)"])
+    tab1, tab2 = st.tabs(["Step 1: Internal Review", "Step 2: Client Document (Clean)"])
     
     with tab1:
-        st.info("Descarga los archivos de trabajo para verificar la lógica de conteo, los totales y el I/O Schedule consolidado.")
+        st.info("Download working files to verify counting logic, totals, and the consolidated I/O Schedule.")
         col_d1, col_d2 = st.columns(2, gap="medium")
         with col_d1:
             st.download_button(
-                "Descargar Quotation (Full / Review)", 
+                "Download Quotation (Full / Review)", 
                 data=st.session_state.buffer_full, 
                 file_name=st.session_state.nombre_full, 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                on_click=marcar_descargado,
+                on_click=mark_downloaded,
                 use_container_width=True
             )
         with col_d2:
             st.download_button(
-                "Descargar I/O Schedule (BOM)", 
+                "Download I/O Schedule (BOM)", 
                 data=st.session_state.buffer_bom, 
                 file_name=st.session_state.nombre_io, 
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -521,13 +517,13 @@ if st.session_state.generado:
             )
             
     with tab2:
-        if st.session_state.get("excel_revisado", False):
-            st.success("El documento está listo y optimizado. Se han ocultado automáticamente los sistemas en ceros manteniendo vivas las fórmulas.")
+        if st.session_state.get("excel_reviewed", False):
+            st.success("The document is ready and optimized. Empty systems have been automatically hidden while preserving formulas.")
             st.markdown("<br>", unsafe_allow_html=True)
             _, col_dl_clean, _ = st.columns([1, 2, 1])
             with col_dl_clean:
                 st.download_button(
-                    label="DESCARGAR CLEAN QUOTATION FINAL",
+                    label="DOWNLOAD FINAL CLEAN QUOTATION",
                     data=st.session_state.buffer_clean,
                     file_name=st.session_state.nombre_clean,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -535,4 +531,4 @@ if st.session_state.generado:
                     use_container_width=True
                 )
         else:
-            st.warning("🔒 Para desbloquear el documento final, por favor haz clic primero en **Descargar Quotation (Full / Review)** en la pestaña anterior para validar los datos.")
+            st.warning("To unlock the final document, please first click Download Quotation (Full / Review) in the previous tab to validate data.")

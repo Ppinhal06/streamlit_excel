@@ -544,6 +544,7 @@ with st.container():
         customer_name = st.text_input("Customer:", placeholder="")
         contact_name = st.text_input("Contact:", placeholder="")
     with col2:
+        quote_ref = st.text_input("Quote Ref:", placeholder="")
         project_description = st.text_area(
             "Engineering Scope:", 
             placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs.",

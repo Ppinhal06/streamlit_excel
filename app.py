@@ -110,7 +110,7 @@ allowed_systems = [
     "Booster Unit - Cold Water", "Storage Tank - Fire Hose Reel", "Storage Tank - Rain Water",
     "Rain Water Harvesting", "Chiller", "Primary CHW Pump A", "Primary CHW Pump B", 
     "CHW Pressurisation Unit", "Chilled Water Buffer Tank", "AHU", "Extract Fan",
-    "Natural Ventilation", "Metering", "Generator", "Unit Heater", "Air Curtain", "AC Units",
+    "Natural Ventilation", "Metering", "Fire Alarm Interface", "Generator", "Unit Heater", "Air Curtain", "AC Units",
     "Radiator Circuit", "FCU (Fan Coil Unit)"
 ]
 
@@ -190,6 +190,7 @@ def match_native_row(sys_name, ws):
         if "chiller" in s and "chiller" == desc: return r
         if "extract fan" in s and "extract fan" in desc: return r
         if "metering" in s and "metering" in desc: return r
+        if "fire alarm" in s and "fire alarm" in desc: return r
         if "radiator" in s and "radiator" == desc: return r
     return None
 
@@ -252,7 +253,7 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
         wb_quot = load_workbook(template_file)
         ws_quot = wb_quot.active
         
-        # Inyección de campos en el encabezado
+        # Inyección de encabezado
         ref_text = quote_ref_user.strip() if quote_ref_user and quote_ref_user.strip() else f"QN{datetime.now().strftime('%y%m%d')}"
         
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
@@ -261,7 +262,6 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
         ws_quot['B4'] = f"Date: {datetime.now().strftime('%d/%m/%Y')}"
         ws_quot['B5'] = "Prepared by: DC Controls"
         
-        # Customer (E2) y Contact (E3)
         if customer and customer.strip():
             ws_quot['E2'] = f"Customer: {customer.strip()}"
         if contact and contact.strip():
@@ -291,8 +291,6 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
         if has_boiler:
             if "Common LPHW Devices" not in json_data or json_data["Common LPHW Devices"] == 0:
                 json_data["Common LPHW Devices"] = 1
-
-        json_data["Metering"] = 1
 
         for sys_name, qty in json_data.items():
             if qty <= 0: continue
@@ -474,13 +472,10 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
                 except:
                     pass
             
-            if "Fire Alarm Interface" in desc or "Metering" in desc or "Pulsed Input" in desc:
-                current_block_keep = True
-            
             if not current_block_keep:
                 ws_clean.row_dimensions[r].hidden = True
 
-        # Aplicar bordes perimetrales en encabezado y bordes de celda en todo el cuerpo
+        # Aplicar bordes perimetrales en encabezado y de celda en el cuerpo
         aplicar_bordes_profesionales(ws_clean)
 
         # Configuración de página limpia para impresión
@@ -553,13 +548,13 @@ with st.container():
     col1, col2 = st.columns([1, 2])
     with col1:
         project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
-        customer_name = st.text_input("Customer:", placeholder="")
-        contact_name = st.text_input("Contact:", placeholder="")
+        customer_name = st.text_input("Customer:", placeholder="e.g. John Doe / Company")
+        contact_name = st.text_input("Contact:", placeholder="e.g. contact@domain.com")
     with col2:
-        quote_ref = st.text_input("Quote Ref:", placeholder="")
+        quote_ref = st.text_input("Quote Ref:", placeholder="e.g. QN-2026-001 (Leave empty for auto)")
         project_description = st.text_area(
             "Engineering Scope:", 
-            placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs.",
+            placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs. Include Metering and Fire Alarm Interface.",
             height=100
         )
 
@@ -587,7 +582,9 @@ if btn_generate:
             2. DO NOT output children or points. JUST the system name and quantity.
             3. If the user mentions Boilers or LPHW Heating, add "Common LPHW Devices": 1 to the JSON.
             4. If the user mentions Chillers, ALWAYS add "Primary CHW Pump A": 1 AND "Primary CHW Pump B": 1 to the JSON.
-            5. ONLY use names exactly as they appear in the ALLOWED SYSTEMS list. DO NOT invent names or categories.
+            5. ONLY include "Metering" if the user explicitly specifies meters, energy metering, or pulsed inputs.
+            6. ONLY include "Fire Alarm Interface" if the user explicitly mentions fire alarm shutdown, interlock, or interface.
+            7. ONLY use names exactly as they appear in the ALLOWED SYSTEMS list. DO NOT invent names or categories.
             
             User Description: "{project_description}"
             
@@ -600,7 +597,6 @@ if btn_generate:
                 
                 st.session_state.materials_data = system_quantities 
                 
-                # Pasar los nuevos inputs a procesar_archivos
                 buffer_full, buffer_bom, buffer_clean = procesar_archivos(
                     system_quantities, 
                     project_name, 

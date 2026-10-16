@@ -233,7 +233,6 @@ def aplicar_bordes_profesionales(ws):
             
         for c in range(2, 10):
             cell = ws.cell(row=r, column=c)
-            # Conservar el recuadro grueso de Quantity si ya existe
             if cell.border and cell.border.left and cell.border.left.style == 'medium':
                 continue
             
@@ -247,17 +246,26 @@ def aplicar_bordes_profesionales(ws):
                 right=right_side
             )
 
-def procesar_archivos(json_data, nombre_proyecto):
+def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_user):
     try:
         template_file = "template_2_2.xlsx" if os.path.exists("template_2_2.xlsx") else "template_2.xlsx"
         wb_quot = load_workbook(template_file)
         ws_quot = wb_quot.active
         
+        # Inyección de campos en el encabezado
+        ref_text = quote_ref_user.strip() if quote_ref_user and quote_ref_user.strip() else f"QN{datetime.now().strftime('%y%m%d')}"
+        
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
-        ws_quot['B2'] = f"Quote Ref: QN{datetime.now().strftime('%y%m%d')}"
+        ws_quot['B2'] = f"Quote Ref: {ref_text}"
         ws_quot['B3'] = "Revision: 0"
         ws_quot['B4'] = f"Date: {datetime.now().strftime('%d/%m/%Y')}"
         ws_quot['B5'] = "Prepared by: DC Controls"
+        
+        # Customer (E2) y Contact (E3)
+        if customer and customer.strip():
+            ws_quot['E2'] = f"Customer: {customer.strip()}"
+        if contact and contact.strip():
+            ws_quot['E3'] = f"Contact: {contact.strip()}"
         
         req_row = ws_quot.max_row
         for r in range(7, ws_quot.max_row):
@@ -307,10 +315,14 @@ def procesar_archivos(json_data, nombre_proyecto):
         ws_bom = wb_bom.active
         
         ws_bom['B1'] = f"Project: {nombre_proyecto}"
-        ws_bom['B2'] = f"Quote Ref: QN{datetime.now().strftime('%y%m%d')}"
+        ws_bom['B2'] = f"Quote Ref: {ref_text}"
         ws_bom['B3'] = "Revision: 0"
         ws_bom['B4'] = f"Date: {datetime.now().strftime('%d/%m/%Y')}"
         ws_bom['B5'] = "Prepared by: DC Controls"
+        if customer and customer.strip():
+            ws_bom['E2'] = f"Customer: {customer.strip()}"
+        if contact and contact.strip():
+            ws_bom['E3'] = f"Contact: {contact.strip()}"
         
         aggregated_io = {}
         for r in range(7, req_row):
@@ -468,7 +480,7 @@ def procesar_archivos(json_data, nombre_proyecto):
             if not current_block_keep:
                 ws_clean.row_dimensions[r].hidden = True
 
-        # Aplicar bordes exteriores al encabezado y bordes de celda completos en todo el cuerpo
+        # Aplicar bordes perimetrales en encabezado y bordes de celda en todo el cuerpo
         aplicar_bordes_profesionales(ws_clean)
 
         # Configuración de página limpia para impresión
@@ -541,10 +553,10 @@ with st.container():
     col1, col2 = st.columns([1, 2])
     with col1:
         project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
-        customer_name = st.text_input("Customer:", placeholder="")
-        contact_name = st.text_input("Contact:", placeholder="")
+        customer_name = st.text_input("Customer:", placeholder="e.g. John Doe / Company")
+        contact_name = st.text_input("Contact:", placeholder="e.g. contact@domain.com")
     with col2:
-        quote_ref = st.text_input("Quote Ref:", placeholder="")
+        quote_ref = st.text_input("Quote Ref:", placeholder="e.g. QN-2026-001 (Leave empty for auto)")
         project_description = st.text_area(
             "Engineering Scope:", 
             placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs.",
@@ -588,7 +600,14 @@ if btn_generate:
                 
                 st.session_state.materials_data = system_quantities 
                 
-                buffer_full, buffer_bom, buffer_clean = procesar_archivos(system_quantities, project_name)
+                # Pasar los nuevos inputs a procesar_archivos
+                buffer_full, buffer_bom, buffer_clean = procesar_archivos(
+                    system_quantities, 
+                    project_name, 
+                    customer_name, 
+                    contact_name, 
+                    quote_ref
+                )
                 
                 if buffer_full and buffer_bom and buffer_clean:
                     st.session_state.generated = True

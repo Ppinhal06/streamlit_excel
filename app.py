@@ -7,6 +7,7 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
+import subprocess
 import os
 
 # --- 1. PAGE CONFIGURATION & STYLING ---
@@ -207,13 +208,8 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
 
 def procesar_archivos(json_data, nombre_proyecto):
     try:
-        if os.path.exists("template_2_2.xlsx"):
-            wb_quot = load_workbook("template_2_2.xlsx")
-            template_path = "template_2_2.xlsx"
-        else:
-            wb_quot = load_workbook("template_2.xlsx")
-            template_path = "template_2.xlsx"
-            
+        template_file = "template_2_2.xlsx" if os.path.exists("template_2_2.xlsx") else "template_2.xlsx"
+        wb_quot = load_workbook(template_file)
         ws_quot = wb_quot.active
         
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
@@ -247,17 +243,26 @@ def procesar_archivos(json_data, nombre_proyecto):
             if "Common LPHW Devices" not in json_data or json_data["Common LPHW Devices"] == 0:
                 json_data["Common LPHW Devices"] = 1
 
+        json_data["Metering"] = 1
+
         for sys_name, qty in json_data.items():
             if qty <= 0: continue
             match_r = match_native_row(sys_name, ws_quot)
             if match_r:
                 ws_quot.cell(row=match_r, column=8).value = qty
 
+        for r in range(7, req_row):
+            cell = ws_quot.cell(row=r, column=2)
+            if not isinstance(cell, MergedCell):
+                val = str(cell.value or "").strip()
+                if "XXXX" in val or "??" in val:
+                    cell.value = val.split(" - ")[0].strip()
+
         buf_quot_full = io.BytesIO()
         wb_quot.save(buf_quot_full)
 
         # --- 2. PROCESS BOM ---
-        wb_bom = load_workbook(template_path)
+        wb_bom = load_workbook(template_file)
         ws_bom = wb_bom.active
         
         ws_bom['B1'] = f"Project: {nombre_proyecto}"
@@ -396,7 +401,6 @@ def procesar_archivos(json_data, nombre_proyecto):
             c_b = ws_clean.cell(row=r, column=2)
             desc = str(c_b.value or "").strip()
             is_bold = c_b.font and c_b.font.bold
-            
             prev_desc = str(ws_clean.cell(row=r-1, column=2).value or "").strip() if r > 7 else ""
             
             is_main_system = False
@@ -431,6 +435,55 @@ def procesar_archivos(json_data, nombre_proyecto):
     except Exception as e:
         st.error(f"Error processing files: {e}")
         return None, None, None
+
+def convert_excel_to_pdf(excel_bytes):
+    temp_excel = os.path.abspath("temp_clean_quotation.xlsx")
+    temp_dir = os.path.abspath(".")
+    
+    with open(temp_excel, "wb") as f:
+        f.write(excel_bytes)
+    
+    pdf_bytes = None
+    
+    # Entorno Streamlit Cloud (Linux con LibreOffice instalado vía packages.txt)
+    if os.name != "nt":
+        cmd = [
+            "libreoffice",
+            "--headless",
+            "--convert-to", "pdf",
+            "--outdir", temp_dir,
+            temp_excel
+        ]
+        subprocess.run(cmd, capture_output=True, text=True)
+        expected_pdf = os.path.splitext(temp_excel)[0] + ".pdf"
+        
+        if os.path.exists(expected_pdf):
+            with open(expected_pdf, "rb") as f:
+                pdf_bytes = f.read()
+            os.remove(expected_pdf)
+    # Entorno local Windows (con Microsoft Excel instalado)
+    else:
+        temp_pdf = os.path.abspath("temp_clean_quotation.pdf")
+        ps_script = f"""
+        $excel = New-Object -ComObject Excel.Application
+        $excel.Visible = $false
+        $excel.DisplayAlerts = $false
+        $wb = $excel.Workbooks.Open('{temp_excel}')
+        $wb.ExportAsFixedFormat(0, '{temp_pdf}')
+        $wb.Close($false)
+        $excel.Quit()
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+        """
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], capture_output=True)
+        if os.path.exists(temp_pdf):
+            with open(temp_pdf, "rb") as f:
+                pdf_bytes = f.read()
+            os.remove(temp_pdf)
+            
+    if os.path.exists(temp_excel):
+        os.remove(temp_excel)
+        
+    return pdf_bytes
 
 # --- 5. PROJECT DETAILS INPUT CONTAINER ---
 st.markdown("### Project Details")
@@ -527,14 +580,30 @@ if st.session_state.generated:
     
     if st.session_state.get("excel_reviewed", False):
         st.markdown("---")
-        st.markdown("### Step 2: Client-Ready Document")
+        st.markdown("### Step 2: Client-Ready Documents")
         st.success("The clean quotation is ready. All unused systems have been automatically hidden while preserving formulas.")
         
-        st.download_button(
-            label="DOWNLOAD CLEAN QUOTATION",
-            data=st.session_state.buffer_clean,
-            file_name=st.session_state.nombre_clean,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary",
-            use_container_width=True
-        )
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            st.download_button(
+                label="DOWNLOAD CLEAN QUOTATION (EXCEL)",
+                data=st.session_state.buffer_clean,
+                file_name=st.session_state.nombre_clean,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+        with col_c2:
+            with st.spinner("Rendering High-Fidelity Clean PDF..."):
+                pdf_data = convert_excel_to_pdf(st.session_state.buffer_clean)
+                
+                if pdf_data:
+                    st.download_button(
+                        label="DOWNLOAD OFFICIAL CLIENT PDF",
+                        data=pdf_data,
+                        file_name=f"Approved_Quotation_{project_name.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True
+                    )
+                else:
+                    st.info("Direct PDF generation is ready once LibreOffice is deployed on the server via packages.txt.")

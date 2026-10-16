@@ -541,6 +541,8 @@ with st.container():
     col1, col2 = st.columns([1, 2])
     with col1:
         project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
+        customer_name = st.text_input("Customer:", placeholder="")
+        contact_name = st.text_input("Contact:", placeholder="")
     with col2:
         project_description = st.text_area(
             "Engineering Scope:", 

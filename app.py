@@ -175,7 +175,11 @@ def match_native_row(sys_name, ws):
     for r in range(7, ws.max_row):
         desc = str(ws.cell(row=r, column=2).value or "").strip().lower()
         part = str(ws.cell(row=r, column=9).value or "").strip()
-        if not desc or part: continue
+        
+        if not desc: continue
+        # Permitir que Fire Alarm coincida aunque tenga Part No. ("Volt Free Contacts")
+        if part and "fire alarm" not in s: continue
+        
         if s == desc: return r
         
         if "primary chw pump a" in s and "primary chw pump a" in desc: return r
@@ -210,10 +214,6 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
         except AttributeError: pass
 
 def aplicar_bordes_profesionales(ws):
-    """
-    1. B1:I5: Solo bordes perimetrales exteriores.
-    2. B6:I(Final): Bordes en todas las celdas de las filas visibles.
-    """
     borde_azul = Side(style='medium', color='003366')
     borde_tabla = Side(style='thin', color='B0C4DE')
     
@@ -297,6 +297,9 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
             match_r = match_native_row(sys_name, ws_quot)
             if match_r:
                 ws_quot.cell(row=match_r, column=8).value = qty
+                # Inyección en DI (columna E) para activar las fórmulas de costo de Fire Alarm
+                if "fire alarm" in sys_name.lower():
+                    ws_quot.cell(row=match_r, column=5).value = qty
 
         for r in range(7, req_row):
             cell = ws_quot.cell(row=r, column=2)
@@ -447,6 +450,7 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
                 main_system_rows.add(r_match)
 
         current_block_keep = True
+        has_fire_alarm = any("fire alarm" in k.lower() for k, v in json_data.items() if v > 0)
         
         for r in range(7, req_row):
             c_b = ws_clean.cell(row=r, column=2)
@@ -471,11 +475,20 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
                         current_block_keep = True
                 except:
                     pass
+
+            # Manejo de visibilidad específico para Fire Alarm
+            if "fire alarm" in desc.lower():
+                if has_fire_alarm:
+                    ws_clean.row_dimensions[r].hidden = False
+                    continue
+                else:
+                    ws_clean.row_dimensions[r].hidden = True
+                    continue
             
             if not current_block_keep:
                 ws_clean.row_dimensions[r].hidden = True
 
-        # Aplicar bordes perimetrales en encabezado y de celda en el cuerpo
+        # Aplicar balance de bordes
         aplicar_bordes_profesionales(ws_clean)
 
         # Configuración de página limpia para impresión
@@ -548,10 +561,10 @@ with st.container():
     col1, col2 = st.columns([1, 2])
     with col1:
         project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
-        customer_name = st.text_input("Customer:", placeholder="")
-        contact_name = st.text_input("Contact:", placeholder="")
+        customer_name = st.text_input("Customer:", placeholder="e.g. John Doe / Company")
+        contact_name = st.text_input("Contact:", placeholder="e.g. contact@domain.com")
     with col2:
-        quote_ref = st.text_input("Quote Ref:", placeholder="")
+        quote_ref = st.text_input("Quote Ref:", placeholder="e.g. QN-2026-001 (Leave empty for auto)")
         project_description = st.text_area(
             "Engineering Scope:", 
             placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs. Include Metering and Fire Alarm Interface.",

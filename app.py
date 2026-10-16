@@ -177,7 +177,6 @@ def match_native_row(sys_name, ws):
         part = str(ws.cell(row=r, column=9).value or "").strip()
         
         if not desc: continue
-        # Permitir que Fire Alarm coincida aunque tenga Part No. ("Volt Free Contacts")
         if part and "fire alarm" not in s: continue
         
         if s == desc: return r
@@ -297,7 +296,6 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
             match_r = match_native_row(sys_name, ws_quot)
             if match_r:
                 ws_quot.cell(row=match_r, column=8).value = qty
-                # Inyección en DI (columna E) para activar las fórmulas de costo de Fire Alarm
                 if "fire alarm" in sys_name.lower():
                     ws_quot.cell(row=match_r, column=5).value = qty
 
@@ -476,7 +474,6 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
                 except:
                     pass
 
-            # Manejo de visibilidad específico para Fire Alarm
             if "fire alarm" in desc.lower():
                 if has_fire_alarm:
                     ws_clean.row_dimensions[r].hidden = False
@@ -493,6 +490,8 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
 
         # Configuración de página limpia para impresión
         ws_clean.print_options.gridLines = False
+        ws_clean.row_breaks.brk = []  # <--- ELIMINA EL SALTO FORZADO QUE PARTÍA LA HOJA
+
         if not ws_clean.sheet_properties.pageSetUpPr:
             ws_clean.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetUpPr()
         ws_clean.sheet_properties.pageSetUpPr.fitToPage = True
@@ -560,7 +559,7 @@ st.markdown("### Project Details")
 with st.container():
     col1, col2 = st.columns([1, 2])
     with col1:
-        project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
+        project_name = st.text_input("Project Name / Reference:", placeholder="")
         customer_name = st.text_input("Customer:", placeholder="")
         contact_name = st.text_input("Contact:", placeholder="")
     with col2:

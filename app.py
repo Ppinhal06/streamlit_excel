@@ -7,6 +7,7 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
+import openpyxl.worksheet.properties
 import subprocess
 import os
 
@@ -388,6 +389,14 @@ def procesar_archivos(json_data, nombre_proyecto):
         # --- 3. FINAL QUOTATION CLEANING ---
         wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
         ws_clean = wb_clean.active
+
+        # DESACTIVAR LÍNEAS DE CUADRÍCULA EN IMPRESIÓN (ELIMINA RECUADROS NEGROS EN PDF)
+        ws_clean.print_options.gridLines = False
+        if not ws_clean.sheet_properties.pageSetUpPr:
+            ws_clean.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetUpPr()
+        ws_clean.sheet_properties.pageSetUpPr.fitToPage = True
+        ws_clean.page_setup.fitToWidth = 1
+        ws_clean.page_setup.fitToHeight = 0
 
         main_system_rows = set()
         for sys in allowed_systems:

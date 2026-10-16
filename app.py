@@ -7,6 +7,7 @@ from datetime import datetime
 import google.generativeai as genai
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
+from openpyxl.styles import Border, Side
 import openpyxl.worksheet.properties
 import subprocess
 import os
@@ -207,6 +208,48 @@ def clonar_estilo_columna_local(source_ws, target_ws, source_row, target_row, es
             t_cell.number_format = s_cell.number_format
         except AttributeError: pass
 
+def aplicar_bordes_profesionales(ws, req_row):
+    """
+    1. B1:I5: Solo bordes exteriores perimetrales.
+    2. B6:I(Summary): Bordes completos en cada celda visible.
+    """
+    borde_azul = Side(style='medium', color='003366')
+    borde_tabla = Side(style='thin', color='B0C4DE')
+    
+    # 1. BORDES EXTERIORES DEL ENCABEZADO (B1:I5)
+    for r in range(1, 6):
+        for c in range(2, 10):
+            cell = ws.cell(row=r, column=c)
+            top = borde_azul if r == 1 else None
+            bottom = borde_azul if r == 5 else None
+            left = borde_azul if c == 2 else None
+            right = borde_azul if c == 9 else None
+            cell.border = Border(top=top, bottom=bottom, left=left, right=right)
+            
+    # 2. BORDES COMPLETOS EN CADA CELDA DE LA TABLA (FILA 6 HASTA SUMMARY/TOTAL)
+    for r in range(6, ws.max_row + 1):
+        if ws.row_dimensions[r].hidden:
+            continue
+        val_b = str(ws.cell(row=r, column=2).value or "").strip()
+        if val_b in ["Price Excludes:", "Notes:"]:
+            break
+            
+        for c in range(2, 10):
+            cell = ws.cell(row=r, column=c)
+            # Conservar el recuadro grueso de Quantity si ya existe
+            if cell.border and cell.border.left and cell.border.left.style == 'medium':
+                continue
+            # Borde exterior izquierdo y derecho de la tabla
+            left_side = borde_azul if (c == 2 and r == 6) else (borde_tabla if c > 2 else Side(style='medium', color='003366'))
+            right_side = borde_azul if (c == 9 and r == 6) else (borde_tabla if c < 9 else Side(style='medium', color='003366'))
+            
+            cell.border = Border(
+                top=borde_tabla, 
+                bottom=borde_tabla, 
+                left=left_side, 
+                right=right_side
+            )
+
 def procesar_archivos(json_data, nombre_proyecto):
     try:
         template_file = "template_2_2.xlsx" if os.path.exists("template_2_2.xlsx") else "template_2.xlsx"
@@ -390,14 +433,6 @@ def procesar_archivos(json_data, nombre_proyecto):
         wb_clean = load_workbook(io.BytesIO(buf_quot_full.getvalue()))
         ws_clean = wb_clean.active
 
-        # DESACTIVAR LÍNEAS DE CUADRÍCULA EN IMPRESIÓN (ELIMINA RECUADROS NEGROS EN PDF)
-        ws_clean.print_options.gridLines = False
-        if not ws_clean.sheet_properties.pageSetUpPr:
-            ws_clean.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetUpPr()
-        ws_clean.sheet_properties.pageSetUpPr.fitToPage = True
-        ws_clean.page_setup.fitToWidth = 1
-        ws_clean.page_setup.fitToHeight = 0
-
         main_system_rows = set()
         for sys in allowed_systems:
             r_match = match_native_row(sys, ws_clean)
@@ -436,6 +471,17 @@ def procesar_archivos(json_data, nombre_proyecto):
             if not current_block_keep:
                 ws_clean.row_dimensions[r].hidden = True
 
+        # Aplicar el balance de bordes: encabezado exterior + celdas completas en la tabla
+        aplicar_bordes_profesionales(ws_clean, req_row)
+
+        # Desactivar líneas de cuadrícula automáticas para no pintar celdas vacías
+        ws_clean.print_options.gridLines = False
+        if not ws_clean.sheet_properties.pageSetUpPr:
+            ws_clean.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetUpPr()
+        ws_clean.sheet_properties.pageSetUpPr.fitToPage = True
+        ws_clean.page_setup.fitToWidth = 1
+        ws_clean.page_setup.fitToHeight = 0
+
         buf_quot_clean = io.BytesIO()
         wb_clean.save(buf_quot_clean)
         
@@ -454,7 +500,7 @@ def convert_excel_to_pdf(excel_bytes):
     
     pdf_bytes = None
     
-    # Entorno Streamlit Cloud (Linux con LibreOffice instalado vía packages.txt)
+    # Entorno Streamlit Cloud (Linux con LibreOffice)
     if os.name != "nt":
         cmd = [
             "libreoffice",
@@ -470,7 +516,7 @@ def convert_excel_to_pdf(excel_bytes):
             with open(expected_pdf, "rb") as f:
                 pdf_bytes = f.read()
             os.remove(expected_pdf)
-    # Entorno local Windows (con Microsoft Excel instalado)
+    # Entorno local Windows (con Microsoft Excel)
     else:
         temp_pdf = os.path.abspath("temp_clean_quotation.pdf")
         ps_script = f"""

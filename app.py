@@ -559,11 +559,11 @@ st.markdown("### Project Details")
 with st.container():
     col1, col2 = st.columns([1, 2])
     with col1:
-        project_name = st.text_input("Project Name / Reference:", placeholder="")
-        customer_name = st.text_input("Customer:", placeholder="")
-        contact_name = st.text_input("Contact:", placeholder="")
+        project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
+        customer_name = st.text_input("Customer:", placeholder="e.g. John Doe / Company")
+        contact_name = st.text_input("Contact:", placeholder="e.g. contact@domain.com")
     with col2:
-        quote_ref = st.text_input("Quote Ref:", placeholder="")
+        quote_ref = st.text_input("Quote Ref:", placeholder="e.g. QN-2026-001 (Leave empty for auto)")
         project_description = st.text_area(
             "Engineering Scope:", 
             placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs. Include Metering and Fire Alarm Interface.",

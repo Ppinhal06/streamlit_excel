@@ -105,7 +105,7 @@ if api_key:
 # === SYSTEMS LIST ===
 allowed_systems = [
     "Common LPHW Devices", "Hot Water Generator  No.1", "Boiler", "LPHW Pressurisation Unit",
-    "Dosing Unit", "Primary LPHW Single Pumps", "Calorifier", "Gas Detection Panel",
+    "Dosing Unit", "Primary LPHW Single Pumps", "Calorifier", "Calorifier Immersion Heater", "Gas Detection Panel",
     "Storage Tank - Mains Water", "Booster Unit - Mains Water", "Storage Tank - Cold Water",
     "Booster Unit - Cold Water", "Storage Tank - Fire Hose Reel", "Storage Tank - Rain Water",
     "Rain Water Harvesting", "Chiller", "Primary CHW Pump A", "Primary CHW Pump B", 
@@ -135,7 +135,7 @@ component_catalog = {
     "LPHW Pressurisation Unit Low Pressure": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Calorifier Enable and Fault": {"Part": "Volt Free Contacts", "AI": 0, "AO": 0, "DI": 1, "DO": 1, "Labour": 50},
     "Calorifier Immersion Temperature Sensor": {"Part": "TI/Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
-    "High Limit Thermostat (60-95 Man. Reset)": {"Part": "RAK TW 1000B", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
+    "High Limit Thermostat (60-95 Man. Reset)": {"Part": "H&C KR80.207", "AI": 0, "AO": 0, "DI": 1, "DO": 0, "Labour": 50},
     "Return Immersion Temperature Sensor": {"Part": "TTI-S Brass Pocket", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Space Temperature Sensor": {"Part": "RS-Temp", "AI": 1, "AO": 0, "DI": 0, "DO": 0, "Labour": 50},
     "Control Valve Actuator": {"Part": "MVC / DB_VZ", "AI": 0, "AO": 1, "DI": 0, "DO": 0, "Labour": 50},
@@ -185,6 +185,7 @@ def match_native_row(sys_name, ws):
         if "primary chw pump b" in s and "primary chw pump b" in desc: return r
         if "boiler" in s and "boiler" == desc: return r
         if "pressurisation" in s and "pressurisation" in desc: return r
+        if "calorifier immersion heater" in s and "calorifier immersion heater" in desc: return r
         if "calorifier" in s and "calorifier" == desc: return r
         if "lphw" in s and "common" in s and "lphw" in desc and "common" in desc: return r
         if "primary lphw" in s and "primary lphw" in desc: return r
@@ -226,7 +227,7 @@ def aplicar_bordes_profesionales(ws):
             right = borde_azul if c == 9 else None
             cell.border = Border(top=top, bottom=bottom, left=left, right=right)
             
-    # 2. BORDES COMPLETOS EN CADA FILA VISIBLE DE LA TABLA HASTA EL FINAL
+    # 2. BORDES COMPLETOS EN CADA FILA VISIBLE DE LA TABLA
     for r in range(6, ws.max_row + 1):
         if ws.row_dimensions[r].hidden:
             continue
@@ -248,11 +249,17 @@ def aplicar_bordes_profesionales(ws):
 
 def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_user):
     try:
-        template_file = "template_2_2.xlsx" if os.path.exists("template_2_2.xlsx") else "template_2.xlsx"
+        # Selección automática del archivo de plantilla más reciente
+        if os.path.exists("template_2_3.xlsx"):
+            template_file = "template_2_3.xlsx"
+        elif os.path.exists("template_2_2.xlsx"):
+            template_file = "template_2_2.xlsx"
+        else:
+            template_file = "template_2.xlsx"
+            
         wb_quot = load_workbook(template_file)
         ws_quot = wb_quot.active
         
-        # Inyección de encabezado
         ref_text = quote_ref_user.strip() if quote_ref_user and quote_ref_user.strip() else f"QN{datetime.now().strftime('%y%m%d')}"
         
         ws_quot['B1'] = f"Project: {nombre_proyecto}"
@@ -274,7 +281,9 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
                 break
             cell = ws_quot.cell(row=r, column=8)
             if not isinstance(cell, MergedCell): 
-                cell.value = None
+                val_str = str(cell.value or "").strip()
+                if not val_str.startswith("="):
+                    cell.value = None
 
         has_chiller = False
         has_boiler = False
@@ -452,12 +461,16 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
         
         for r in range(7, req_row):
             c_b = ws_clean.cell(row=r, column=2)
+            c_h = ws_clean.cell(row=r, column=8)
             desc = str(c_b.value or "").strip()
             is_bold = c_b.font and c_b.font.bold
             prev_desc = str(ws_clean.cell(row=r-1, column=2).value or "").strip() if r > 7 else ""
             
+            # DETECCIÓN DE ENCABEZADO POR RECUADRO DE CANTIDAD
+            has_qty_box = c_h.border and c_h.border.left and c_h.border.left.style == 'medium'
+            
             is_main_system = False
-            if r in main_system_rows:
+            if r in main_system_rows or has_qty_box:
                 is_main_system = True
             elif desc and is_bold and not prev_desc:
                 is_main_system = True
@@ -466,7 +479,7 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
                 is_main_system = False
                 
             if is_main_system:
-                qty_val = ws_clean.cell(row=r, column=8).value
+                qty_val = c_h.value
                 current_block_keep = False 
                 try:
                     if qty_val is not None and int(float(qty_val)) > 0:
@@ -485,12 +498,12 @@ def procesar_archivos(json_data, nombre_proyecto, customer, contact, quote_ref_u
             if not current_block_keep:
                 ws_clean.row_dimensions[r].hidden = True
 
-        # Aplicar balance de bordes
+        # Aplicar formato y balance de bordes
         aplicar_bordes_profesionales(ws_clean)
 
-        # Configuración de página limpia para impresión
+        # Configuración de impresión limpia
         ws_clean.print_options.gridLines = False
-        ws_clean.row_breaks.brk = []  # <--- ELIMINA EL SALTO FORZADO QUE PARTÍA LA HOJA
+        ws_clean.row_breaks.brk = []  # Elimina el salto forzado residual de fila 187
 
         if not ws_clean.sheet_properties.pageSetUpPr:
             ws_clean.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetUpPr()
@@ -560,10 +573,10 @@ with st.container():
     col1, col2 = st.columns([1, 2])
     with col1:
         project_name = st.text_input("Project Name / Reference:", placeholder="e.g. IDA Cavan - Building 2")
-        customer_name = st.text_input("Customer:", placeholder="")
-        contact_name = st.text_input("Contact:", placeholder="")
+        customer_name = st.text_input("Customer:", placeholder="e.g. John Doe / Company")
+        contact_name = st.text_input("Contact:", placeholder="e.g. contact@domain.com")
     with col2:
-        quote_ref = st.text_input("Quote Ref:", placeholder="")
+        quote_ref = st.text_input("Quote Ref:", placeholder="e.g. QN-2026-001 (Leave empty for auto)")
         project_description = st.text_area(
             "Engineering Scope:", 
             placeholder="Example: We need a plant with 2 Boilers, 2 Chillers, 25 Radiator Circuits, and 4 FCUs. Include Metering and Fire Alarm Interface.",
